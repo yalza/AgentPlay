@@ -1,0 +1,15 @@
+# .NET
+bin/
+obj/
+*.user
+# Unity testbed
+Testbed/[Ll]ibrary/
+Testbed/[Tt]emp/
+Testbed/[Ll]ogs/
+Testbed/[Oo]bj/
+Testbed/[Uu]ser[Ss]ettings/
+Testbed/AgentPlay/
+Testbed/*.csproj
+Testbed/*.sln
+.vs/
+.idea/
