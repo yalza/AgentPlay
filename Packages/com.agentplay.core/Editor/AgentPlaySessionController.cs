@@ -84,6 +84,7 @@ namespace AgentPlay.Editor
             _previousRunInBackground = Application.runInBackground;
             Application.runInBackground = true;
 
+            AgentEvents.MainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
             AgentEvents.Emitted -= OnEvent;
             AgentEvents.Emitted += OnEvent;
             IsActive = true;

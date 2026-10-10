@@ -28,6 +28,7 @@ namespace AgentPlay
         readonly StepPolicy _step = new StepPolicy();
         readonly SequenceCounter _seq = new SequenceCounter();
         readonly List<string> _recent = new List<string>();
+        PauseReason _pauseReason;
 
         public string Mode => _step.Mode;
         public int EventCount { get; private set; }
@@ -43,7 +44,12 @@ namespace AgentPlay
             _snapshotTimer = new IntervalTimer(snapshotIntervalSeconds);
         }
 
-        public void OnConnected() => Send(MessageTypes.Hello, _hello);
+        /// <summary>Sends hello; a runner attaching while the game waits for resume also learns that it is paused.</summary>
+        public void OnConnected()
+        {
+            Send(MessageTypes.Hello, _hello);
+            if (AwaitingResume) AnnouncePause();
+        }
 
         public void OnLine(string line)
         {
@@ -53,7 +59,7 @@ namespace AgentPlay
             {
                 env = MessageCodec.Decode(line);
             }
-            catch (ProtocolException e)
+            catch (Exception e)   // ProtocolException, or any codec slip: never let runner input throw into the Editor
             {
                 SendError(e.Message);
                 return;
@@ -119,7 +125,8 @@ namespace AgentPlay
                     }
                     if (mode == Modes.TurnBased)
                     {
-                        Pause(PauseReason.Mode);
+                        if (AwaitingResume) AnnouncePause();
+                        else Pause(PauseReason.Mode);
                     }
                     else
                     {
@@ -149,8 +156,14 @@ namespace AgentPlay
         {
             if (AwaitingResume) return;
             AwaitingResume = true;
+            _pauseReason = reason;
             _host.SetPaused(true);
-            Send(MessageTypes.Paused, new PausedMessage { Reason = reason.ToString().ToLowerInvariant(), T = _host.GameTime });
+            AnnouncePause();
+        }
+
+        void AnnouncePause()
+        {
+            Send(MessageTypes.Paused, new PausedMessage { Reason = _pauseReason.ToString().ToLowerInvariant(), T = _host.GameTime });
         }
 
         void SendError(string message) => Send(MessageTypes.Error, new ErrorMessage { Message = message });

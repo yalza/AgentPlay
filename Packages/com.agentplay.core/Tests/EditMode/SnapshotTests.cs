@@ -66,17 +66,54 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void UnityObjectPayloadBecomesAReference()
+        {
+            var go = new GameObject("fake");
+            try
+            {
+                // Built-in component: the Editor-only test assembly cannot AddComponent its own MonoBehaviours.
+                var c = go.AddComponent<LineRenderer>();
+                Assert.IsTrue(c != null, "component must exist for this test to mean anything");
+                var nested = UnityJson.ToPayload(new { target = c });
+                Assert.AreEqual("LineRenderer", (string)nested["target"]["type"]);
+                Assert.AreEqual("fake", (string)nested["target"]["name"]);
+                Assert.AreEqual(c.GetInstanceID(), (int)nested["target"]["id"]);
+                var direct = UnityJson.ToPayload(c);
+                Assert.AreEqual("fake", (string)direct["name"]);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ColorAndQuaternionSerializeAsArrays()
+        {
+            Assert.AreEqual("{\"c\":[1.0,0.0,0.0,1.0],\"q\":[0.0,0.0,0.0,1.0]}",
+                UnityJson.ToPayload(new { c = Color.red, q = Quaternion.identity }).ToString(Formatting.None));
+        }
+
+        [Test]
+        public void OversizedPayloadIsReplacedByAnError()
+        {
+            var p = UnityJson.ToPayload(new { s = new string('x', UnityJson.MaxPayloadChars + 1) });
+            StringAssert.Contains("too large", (string)p["error"]);
+        }
+
+        [Test]
         public void ResolverFindsSceneInstanceAndForgetsDestroyedOne()
         {
             var go = new GameObject("fake");
             try
             {
-                var c = go.AddComponent<FakeObservedBehaviour>();
+                var c = go.AddComponent<LineRenderer>();
+                Assert.IsTrue(c != null, "component must exist for this test to mean anything");
                 var r = new UnityInstanceResolver();
-                Assert.AreSame(c, r.Resolve(typeof(FakeObservedBehaviour)));
+                Assert.AreSame(c, r.Resolve(typeof(LineRenderer)));
                 Object.DestroyImmediate(go);
                 go = null;
-                Assert.IsNull(r.Resolve(typeof(FakeObservedBehaviour)));
+                Assert.IsNull(r.Resolve(typeof(LineRenderer)));
                 Assert.IsNull(r.Resolve(typeof(FakeGame)), "plain C# types cannot be resolved");
             }
             finally

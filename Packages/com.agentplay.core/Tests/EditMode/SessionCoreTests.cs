@@ -121,6 +121,26 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void ReconnectWhileWaitingAnnouncesThePauseAgain()
+        {
+            _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
+            _host.Sent.Clear();
+            _core.OnConnected();   // a new runner attaches while the game waits for resume
+            CollectionAssert.AreEqual(new[] { MessageTypes.Hello, MessageTypes.Paused }, _host.Sent.Select(e => e.Type).ToArray());
+            Assert.AreEqual("mode", _host.Sent[1].As<PausedMessage>().Reason);
+        }
+
+        [Test]
+        public void SetTurnBasedWhileWaitingAnnouncesThePauseAgain()
+        {
+            _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
+            _core.OnEvent(Ev("a", true));
+            _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
+            Assert.AreEqual(2, _host.OfType(MessageTypes.Paused).Count);
+            Assert.IsTrue(_host.Paused);
+        }
+
+        [Test]
         public void RealtimeModeUnpauses()
         {
             _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
@@ -144,6 +164,7 @@ namespace AgentPlay.Tests
         [TestCase("{\"type\":\"teleport\",\"seq\":1}")]
         [TestCase("{\"type\":\"set_mode\",\"seq\":1,\"mode\":\"fast\"}")]
         [TestCase("{\"type\":\"resume\",\"seq\":1,\"max_game_seconds\":\"abc\"}")]
+        [TestCase("{\"type\":\"get_state\",\"seq\":99999999999999999999}")]
         public void BadMessagesGetAnErrorReplyAndNoException(string line)
         {
             Assert.DoesNotThrow(() => _core.OnLine(line));

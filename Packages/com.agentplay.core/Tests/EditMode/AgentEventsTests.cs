@@ -92,6 +92,25 @@ namespace AgentPlay.Tests
             }
         }
 
+        [Test]
+        public void EmitFromAWorkerThreadIsDroppedWithoutThrowing()
+        {
+            int oldMain = AgentEvents.MainThreadId;
+            AgentEvents.MainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            try
+            {
+                AgentEvents.Emitted += Collect;
+                Assert.DoesNotThrow(() => System.Threading.Tasks.Task.Run(() => AgentEvents.Emit("bg")).Wait());
+                Assert.AreEqual(0, _got.Count);
+                AgentEvents.Emit("fg");
+                Assert.AreEqual(1, _got.Count);
+            }
+            finally
+            {
+                AgentEvents.MainThreadId = oldMain;
+            }
+        }
+
         class CountingPayload
         {
             public int Reads;

@@ -26,23 +26,44 @@ namespace AgentPlay.Runner
             Port = port;
         }
 
-        /// <summary>Connects to the first port in the range that accepts; null when none does.</summary>
+        public const int AttemptTimeoutMs = 300;
+
+        /// <summary>
+        /// Tries every port at once and keeps the lowest one that accepted; null when none does.
+        /// Sequential connects are too slow on Windows, where a refused loopback connect takes about 2 s.
+        /// </summary>
         public static async Task<BridgeClient> TryConnectAsync(string host, int firstPort, int lastPort, CancellationToken ct)
         {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(AttemptTimeoutMs);
+
+            var clients = new List<TcpClient>();
+            var attempts = new List<Task>();
             for (int port = firstPort; port <= lastPort; port++)
             {
                 var client = new TcpClient();
-                try
-                {
-                    await client.ConnectAsync(host, port, ct);
-                    return new BridgeClient(client, port);
-                }
-                catch (SocketException)
-                {
-                    client.Dispose();
-                }
+                clients.Add(client);
+                attempts.Add(client.ConnectAsync(host, port, timeout.Token).AsTask());
             }
-            return null;
+            try
+            {
+                await Task.WhenAll(attempts);
+            }
+            catch (Exception)
+            {
+                // Refused or timed-out ports; each task's status is inspected below.
+            }
+            ct.ThrowIfCancellationRequested();
+
+            BridgeClient chosen = null;
+            for (int i = 0; i < clients.Count; i++)
+            {
+                if (chosen == null && attempts[i].Status == TaskStatus.RanToCompletion && clients[i].Connected)
+                    chosen = new BridgeClient(clients[i], firstPort + i);
+                else
+                    clients[i].Dispose();
+            }
+            return chosen;
         }
 
         public async IAsyncEnumerable<string> ReadLinesAsync([EnumeratorCancellation] CancellationToken ct)
@@ -66,7 +87,16 @@ namespace AgentPlay.Runner
                     broken = true;
                 }
                 if (broken || n == 0) yield break;
-                foreach (var line in framer.Push(buffer, 0, n))
+                IReadOnlyList<string> lines;
+                try
+                {
+                    lines = framer.Push(buffer, 0, n);
+                }
+                catch (LineTooLongException)
+                {
+                    yield break;   // treat as a broken connection; the caller reconnects
+                }
+                foreach (var line in lines)
                     yield return line;
             }
         }

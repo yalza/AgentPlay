@@ -3,8 +3,8 @@
 Ngày chạy: 2026-10-11 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 37/37 passed, 0 failed
-- `Tools/unity-tests.sh`: 48/48 passed, 0 failed
+- `dotnet test AgentPlay.sln`: 42/42 passed, 0 failed (sau vòng sửa theo review)
+- `Tools/unity-tests.sh`: 55/55 passed, 0 failed (sau vòng sửa theo review)
 - `Tools/e2e-m1.sh`: ALL CHECKS PASSED
 
 ## Rủi ro trong spec mục 13
@@ -20,3 +20,6 @@ Ngày chạy: 2026-10-11 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315)
 - Runner thứ hai kết nối vào cùng cổng sẽ chờ tới khi runner đầu ngắt, và in cảnh báo sau 5 giây không nhận được hello.
 - Kiểm tra hết ngân sách thời gian chạy theo EditorApplication.update, nên có thể vượt ngân sách vài frame.
 - Domain reload giữa Play mode tạo một file trace mới cho phần còn lại của phiên.
+- Mở hai Editor cùng chạy AgentPlay: runner luôn chọn cổng thấp nhất đang mở, không chọn được Editor theo tên game. Nếu Editor đó đã có runner khác, runner mới chờ và chỉ in cảnh báo sau 5 giây. Dự kiến thêm lựa chọn `--game` và trả lời "busy" ở M2.
+- `AgentEvents.Emit` gọi từ thread phụ bị bỏ qua (kèm một cảnh báo), không được xếp hàng.
+- Payload sự kiện lớn hơn 65.536 ký tự bị thay bằng `{"error": "Payload too large ..."}`.

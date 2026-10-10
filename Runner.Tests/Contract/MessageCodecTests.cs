@@ -57,6 +57,7 @@ namespace AgentPlay.Runner.Tests.Contract
         [InlineData("{\"type\":\"x\"}")]
         [InlineData("{\"type\":\"x\",\"seq\":\"1\"}")]
         [InlineData("{\"type\":\"x\",\"seq\":1} {}")]
+        [InlineData("{\"type\":\"x\",\"seq\":99999999999999999999}")]
         public void DecodeRejectsMalformed(string line)
         {
             Assert.Throws<ProtocolException>(() => MessageCodec.Decode(line));

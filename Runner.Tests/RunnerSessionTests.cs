@@ -78,6 +78,14 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void MistypedFieldsArePrintedInsteadOfThrown()
+        {
+            var env = MessageCodec.Decode("{\"type\":\"event\",\"seq\":1,\"t\":\"abc\"}");
+            Assert.Empty(Session().Handle(env));
+            Assert.Contains(_printed, line => line.StartsWith("bad 'event' message from Unity:"));
+        }
+
+        [Fact]
         public void ResetForgetsHello()
         {
             var s = Session();

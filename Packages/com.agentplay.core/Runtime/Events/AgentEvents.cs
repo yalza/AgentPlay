@@ -29,6 +29,11 @@ namespace AgentPlay
     {
         public static event Action<AgentEventRecord> Emitted;
 
+        /// <summary>Managed id of the Unity main thread; set by the Editor session. 0 disables the check.</summary>
+        public static int MainThreadId;
+
+        static bool _warnedOffThread;
+
         public static Func<double> TimeSource = () => UnityEngine.Time.timeAsDouble;
         public static Func<long> FrameSource = () => UnityEngine.Time.frameCount;
 
@@ -38,6 +43,16 @@ namespace AgentPlay
         {
             var handlers = Emitted;
             if (handlers == null) return;
+            if (MainThreadId != 0 && System.Threading.Thread.CurrentThread.ManagedThreadId != MainThreadId)
+            {
+                // Unity's Time API and the session are main-thread only; drop rather than throw into game code.
+                if (!_warnedOffThread)
+                {
+                    _warnedOffThread = true;
+                    Debug.LogWarning("[AgentPlay] AgentEvents.Emit must be called from the main thread; dropped '" + name + "'");
+                }
+                return;
+            }
             if (string.IsNullOrEmpty(name))
             {
                 Debug.LogWarning("[AgentPlay] Ignored an event with an empty event name");

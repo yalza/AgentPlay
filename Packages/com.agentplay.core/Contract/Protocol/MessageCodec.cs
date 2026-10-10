@@ -40,10 +40,10 @@ namespace AgentPlay.Contract
             var type = o["type"];
             if (type == null || type.Type != JTokenType.String)
                 throw new ProtocolException("Missing string field 'type'");
-            var seq = o["seq"];
-            if (seq == null || seq.Type != JTokenType.Integer)
-                throw new ProtocolException("Missing integer field 'seq'");
-            return new Envelope((string)type, (long)seq, o);
+            // Integers beyond long parse as BigInteger; reject them instead of overflowing on the cast.
+            if (!(o["seq"] is JValue seq) || !(seq.Value is long seqValue))
+                throw new ProtocolException("Missing integer field 'seq' (64-bit)");
+            return new Envelope((string)type, seqValue, o);
         }
     }
 }

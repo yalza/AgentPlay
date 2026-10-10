@@ -39,6 +39,21 @@ namespace AgentPlay.Runner
         public IReadOnlyList<Outgoing> Handle(Envelope env)
         {
             var outgoing = new List<Outgoing>();
+            try
+            {
+                Dispatch(env, outgoing);
+            }
+            catch (Exception e) when (e is JsonException || e is FormatException || e is InvalidCastException || e is ArgumentException)
+            {
+                // Field type mismatches from Unity must not crash the runner.
+                _print("bad '" + env.Type + "' message from Unity: " + e.Message);
+                outgoing.Clear();
+            }
+            return outgoing;
+        }
+
+        void Dispatch(Envelope env, List<Outgoing> outgoing)
+        {
             switch (env.Type)
             {
                 case MessageTypes.Hello:
@@ -85,7 +100,6 @@ namespace AgentPlay.Runner
                     _print("unknown message '" + env.Type + "'");
                     break;
             }
-            return outgoing;
         }
 
         static string Fmt(double d) => d.ToString("0.00", CultureInfo.InvariantCulture);
