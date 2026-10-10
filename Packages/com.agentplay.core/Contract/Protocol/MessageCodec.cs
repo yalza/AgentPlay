@@ -15,6 +15,12 @@ namespace AgentPlay.Contract
             return o.ToString(Formatting.None);
         }
 
+        public static string Encode<T>(string type, long seq, T dto)
+        {
+            var body = dto == null ? null : JObject.FromObject(dto, ContractJson.Serializer);
+            return Encode(type, seq, body);
+        }
+
         public static Envelope Decode(string line)
         {
             JObject o;
