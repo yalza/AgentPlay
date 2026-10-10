@@ -78,7 +78,7 @@ AgentPlay/
   docs/
 ```
 
-`Contract/` chứa định nghĩa message, Plan DSL và bộ đánh giá điều kiện. Unity package nhúng cùng các file nguồn này: `Contract/` là thư mục nguồn duy nhất, và package tham chiếu tới nó bằng một asmdef riêng `AgentPlay.Contract` đặt trong package. Cách nối cụ thể (copy lúc build hay symlink) sẽ chốt trong plan M1, sau khi thử trong Editor. Điều bắt buộc: hai bên luôn dùng **cùng một mã nguồn** cho parser điều kiện, để luật chạy trong game và luật runner kiểm tra cho cùng một kết quả.
+Mã nguồn Contract nằm trong package, ở `Packages/com.agentplay.core/Contract/` (asmdef `AgentPlay.Contract`, `noEngineReferences`). Thư mục `Contract/` ở gốc repo chỉ chứa `AgentPlay.Contract.csproj`, file này biên dịch cùng các file `.cs` đó cho runner. Hai bên luôn dùng **cùng một mã nguồn**, để luật chạy trong game và luật runner kiểm tra cho cùng một kết quả.
 
 ### 3.2 Đơn vị và trách nhiệm
 
@@ -88,7 +88,7 @@ AgentPlay/
 | `AgentEvents` | Runtime | API tĩnh `Emit(name, payload)` cho game gọi, đưa vào hàng đợi sự kiện | Không |
 | `Executor` | Runtime | Chạy Plan từng frame: bước hiện tại, điều kiện `until`, luật `rules` | Registry, Contract |
 | `ReflexSet` | Runtime | Luật đã duyệt, chạy trước Plan, có ưu tiên cao nhất | Contract |
-| `SafeBehavior` | Runtime | Hành động mặc định khi không có Plan (game khai báo qua `[AgentAction(safe = true)]`) | Registry |
+| `SafeBehavior` | Runtime | Hành động mặc định khi không có Plan (game khai báo qua `[AgentAction(Safe = true)]`) | Registry |
 | `InputDriver` | Runtime | Bơm input qua Input System cho game chưa có action cấp cao (mức 0) | Input System |
 | `TraceRecorder` | Runtime | Ghi sự kiện, ảnh chụp trạng thái và kết quả hành động ra file NDJSON | Registry |
 | `BridgeServer` | Editor | TCP server, nhận và gửi message, chuyển việc về main thread qua `EditorApplication.update` | Contract |
@@ -120,10 +120,10 @@ public class PlayerSack : MonoBehaviour {
 }
 
 public class ThiefAgentActions : MonoBehaviour {   // game tự viết, mỏng
-    [AgentAction("goto", "Walk to a named zone", safe = false)]
+    [AgentAction("goto", "Walk to a named zone", Safe = false)]
     public AgentActionStatus GoTo(string zone) { ... }   // gọi mỗi frame tới khi trả Done/Failed
 
-    [AgentAction("hide", "Crouch at nearest cover", safe = true)]
+    [AgentAction("hide", "Crouch at nearest cover", Safe = true)]
     public AgentActionStatus Hide() { ... }
 }
 
@@ -134,9 +134,9 @@ AgentEvents.Emit("guard.spotted", new { guard = id, distance = d });
 Quy tắc:
 
 - **`[AgentObserve(path)]`** đặt trên field hoặc property kiểu số, bool, string, enum hoặc `Vector3`. `path` là tên ổn định mà Plan và luật dùng để tham chiếu. Registry gom thành một snapshot JSON phẳng.
-- **`[AgentAction(name)]`** đặt trên method trả `AgentActionStatus` (`Running`, `Done`, `Failed`). Tham số chỉ dùng kiểu cơ bản. Executor gọi lại method mỗi frame cho tới khi xong. Tối đa một action được đánh dấu `safe = true`; đó là hành vi an toàn mặc định (mục 7.2).
+- **`[AgentAction(name)]`** đặt trên method trả `AgentActionStatus` (`Running`, `Done`, `Failed`). Tham số chỉ dùng kiểu cơ bản. Executor gọi lại method mỗi frame cho tới khi xong. Tối đa một action được đánh dấu `Safe = true`; đó là hành vi an toàn mặc định (mục 7.2).
 - **`AgentEvents.Emit(name, payload, important = false, outcome = Neutral)`** phát sự kiện có nghĩa. `important` đánh dấu sự kiện cần báo runner khi không luật nào bắt (mục 6). `outcome` (`Good`, `Neutral`, `Bad`) dùng để chấm điểm phản xạ (mục 8.4). Đây vừa là điểm ngắt kế hoạch, vừa là dữ liệu để học từ phiên người chơi.
-- **`[AgentGame(name, version)]`** đặt trên một lớp bất kỳ, khai báo tên game và phiên bản luật chơi. TileThieves trả version bằng hash của `BalanceConfig`. Đổi version thì playbook và phản xạ cũ bị đánh dấu cần kiểm lại (mục 8.4).
+- **`[AgentGame(name, Version = ..., VersionMember = ...)]`** đặt trên một lớp bất kỳ, khai báo tên game và phiên bản luật chơi. TileThieves trả version bằng hash của `BalanceConfig`. Đổi version thì playbook và phản xạ cũ bị đánh dấu cần kiểm lại (mục 8.4).
 - Object có nhiều bản (nhiều bảo vệ) dùng `[AgentObserveList("guards")]` trên một `IEnumerable` trả các object có field `[AgentObserve]`.
 
 Game chưa có adapter vẫn chơi được ở **mức 0**: action duy nhất là `input`, do `InputDriver` thực hiện (giữ hoặc nhả phím, di chuột), và quan sát gồm ảnh chụp Game view cộng cây scene rút gọn. Mức 0 là phương án dự phòng, không phải trọng tâm tối ưu.
@@ -154,9 +154,11 @@ TCP trên `127.0.0.1`, cổng mặc định 47800 (nếu bận thì thử tiếp
 | Unity → Runner | `event` | Sự kiện game, kèm snapshot tại thời điểm đó |
 | Unity → Runner | `plan_status` | `step_done`, `plan_done`, `plan_failed` (kèm lý do), `rule_fired`, `reflex_fired` |
 | Unity → Runner | `waiting` | Executor hết Plan, đang chạy hành vi an toàn |
+| Unity → Runner | `paused` | Editor vừa dừng ở chế độ theo lượt; reason là mode, event hoặc budget |
+| Unity → Runner | `error` | Message từ runner không hợp lệ hoặc không xử lý được, kèm lý do |
 | Runner → Unity | `set_mode` | `turn_based` hoặc `realtime` |
 | Runner → Unity | `plan` | Plan mới, thay thế Plan cũ |
-| Runner → Unity | `resume` | Chế độ theo lượt: chạy tiếp tới sự kiện ngắt tiếp theo hoặc tối đa N giây game |
+| Runner → Unity | `resume` | Chế độ theo lượt: chạy tiếp tối đa max_game_seconds giây game (0 là tới sự kiện quan trọng kế tiếp) |
 | Runner → Unity | `set_reflexes` | Danh sách phản xạ đã duyệt |
 | Runner → Unity | `get_state` | Xin snapshot ngay |
 | Runner → Unity | `screenshot` | Chỉ ở mức 0: chụp Game view, trả PNG base64 |
@@ -195,6 +197,8 @@ TCP trên `127.0.0.1`, cổng mặc định 47800 (nếu bận thì thử tiếp
 ### 7.1 Theo lượt (mặc định khi thử trong Editor)
 
 Khi Executor cần model (Plan xong, Plan hỏng, có sự kiện quan trọng), `StepController` đặt `EditorApplication.isPaused = true`. Có Plan mới thì runner gửi `resume` và game chạy tiếp. Kết quả không phụ thuộc thời gian model suy nghĩ.
+
+Trong suốt phiên AgentPlay, `Application.runInBackground` được bật (trả lại giá trị cũ khi phiên kết thúc). Nếu không, Editor ngừng chạy game khi cửa sổ mất focus và `resume` không có tác dụng. Điều này đã được phát hiện khi chạy E2E của M1.
 
 ### 7.2 Thời gian thực
 
@@ -299,7 +303,7 @@ Mỗi mốc có một implementation plan riêng.
 | Mốc | Nội dung | Xong khi |
 | --- | --- | --- |
 | **M1: Nền** | Contract, Registry, AgentEvents, BridgeServer, StepController, TraceRecorder, cửa sổ AgentPlay (trạng thái kết nối, nhãn phiên); runner kết nối, in `hello` và sự kiện | Scene test gửi `hello` và sự kiện tới runner; trace được ghi; theo lượt dừng và chạy tiếp được |
-| **M2: Tự chơi theo lượt** | Plan DSL, Executor, SafeBehavior, PlanValidator, SessionLoop với Opus; adapter TileThieves | Agent tự chơi trọn một vụ trộm trong TileThieves ở chế độ theo lượt (tiêu chí 1 và 2) |
+| **M2: Tự chơi theo lượt** | Plan DSL, Executor, SafeBehavior, PlanValidator, SessionLoop với Opus; `[AgentObserveList]`; adapter TileThieves | Agent tự chơi trọn một vụ trộm trong TileThieves ở chế độ theo lượt (tiêu chí 1 và 2) |
 | **M3: Học** | Reflector, playbook, phản xạ cùng vòng đời và cửa sổ duyệt | Tiêu chí 3 và 4 |
 | **M4: Nhanh và mở rộng** | Chế độ thời gian thực, Haiku routing, Prefetcher, telemetry đầy đủ; InputDriver mức 0; skill `agentplay-adapt` | Tiêu chí 5; một game thứ hai của người dùng chạy được với adapter do skill sinh |
 

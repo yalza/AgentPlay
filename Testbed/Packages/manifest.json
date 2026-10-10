@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "com.agentplay.core": "file:../../Packages/com.agentplay.core",
+    "com.unity.test-framework": "1.6.0",
+    "com.unity.ugui": "2.0.0",
+    "com.unity.modules.imgui": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.screencapture": "1.0.0",
+    "com.unity.modules.ui": "1.0.0"
+  },
+  "testables": ["com.agentplay.core"]
+}

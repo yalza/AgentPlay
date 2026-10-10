@@ -1,0 +1,144 @@
+using System;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using AgentPlay.Contract;
+
+namespace AgentPlay.Runner
+{
+    public static class Program
+    {
+        static readonly object PrintLock = new object();
+        static readonly SequenceCounter Seq = new SequenceCounter();
+        static volatile BridgeClient _current;
+
+        public static async Task<int> Main(string[] args)
+        {
+            CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+            RunnerOptions options;
+            try
+            {
+                options = RunnerOptions.Parse(args);
+            }
+            catch (ArgumentException e)
+            {
+                Console.Error.WriteLine(e.Message);
+                Console.Error.WriteLine(RunnerOptions.Usage);
+                return 2;
+            }
+
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+            _ = Task.Run(() => ReadKeyboard(cts));
+
+            var session = new RunnerSession(options, Log);
+            var idle = Stopwatch.StartNew();
+            bool everConnected = false;
+            Log("runner started; looking for Unity on " + options.Host + ":" + options.FirstPort + "-" + options.LastPort);
+
+            while (!cts.IsCancellationRequested)
+            {
+                if (everConnected && options.IdleExitSeconds > 0 && idle.Elapsed.TotalSeconds >= options.IdleExitSeconds)
+                {
+                    Log("no Unity connection for " + options.IdleExitSeconds + " s; exiting");
+                    break;
+                }
+
+                BridgeClient client;
+                try
+                {
+                    client = await BridgeClient.TryConnectAsync(options.Host, options.FirstPort, options.LastPort, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                if (client == null)
+                {
+                    try { await Task.Delay(1000, cts.Token); } catch (OperationCanceledException) { break; }
+                    continue;
+                }
+
+                everConnected = true;
+                _current = client;
+                session.Reset();
+                Log("connected to " + options.Host + ":" + client.Port);
+                _ = WarnIfNoHello(session, client);
+
+                try
+                {
+                    await foreach (var line in client.ReadLinesAsync(cts.Token))
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        Envelope env;
+                        try
+                        {
+                            env = MessageCodec.Decode(line);
+                        }
+                        catch (ProtocolException e)
+                        {
+                            Log("bad message from Unity: " + e.Message);
+                            continue;
+                        }
+                        foreach (var msg in session.Handle(env))
+                        {
+                            if (msg.DelayMs > 0) await Task.Delay(msg.DelayMs, cts.Token);
+                            await client.SendAsync(MessageCodec.Encode(msg.Type, Seq.Next(), msg.Body), cts.Token);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (IOException e)
+                {
+                    Log("connection error: " + e.Message);
+                }
+
+                _current = null;
+                client.Dispose();
+                idle.Restart();
+                if (!cts.IsCancellationRequested) Log("disconnected; waiting for Unity Play mode");
+            }
+            return 0;
+        }
+
+        static async Task WarnIfNoHello(RunnerSession session, BridgeClient client)
+        {
+            await Task.Delay(5000);
+            if (!session.HasHello && _current == client)
+                Log("WARNING: connected but no hello after 5 s (is another runner attached to this port?)");
+        }
+
+        static async Task ReadKeyboard(CancellationTokenSource cts)
+        {
+            string line;
+            while ((line = Console.ReadLine()) != null)
+            {
+                var client = _current;
+                switch (line.Trim())
+                {
+                    case "q":
+                        cts.Cancel();
+                        return;
+                    case "s":
+                        if (client != null) await client.SendAsync(MessageCodec.Encode(MessageTypes.GetState, Seq.Next(), (object)null), cts.Token);
+                        break;
+                    case "r":
+                        if (client != null) await client.SendAsync(MessageCodec.Encode(MessageTypes.Resume, Seq.Next(), new ResumeMessage { MaxGameSeconds = 0 }), cts.Token);
+                        break;
+                }
+            }
+        }
+
+        static void Log(string message)
+        {
+            lock (PrintLock)
+                Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + "] " + message);
+        }
+    }
+}
