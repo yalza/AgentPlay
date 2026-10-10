@@ -23,6 +23,7 @@ namespace AgentPlay.Editor
         static TraceWriter _trace;
         static RegistryModel _model;
         static UnityInstanceResolver _resolver;
+        static bool _previousRunInBackground;
         static readonly HashSet<string> Warned = new HashSet<string>();
         static readonly UnityHost Host = new UnityHost();
 
@@ -79,6 +80,10 @@ namespace AgentPlay.Editor
             else
                 Debug.LogError("[AgentPlay] No free port in " + BridgeServer.FirstPort + "-" + BridgeServer.LastPort + "; runner cannot connect");
 
+            // The agent keeps playing while the Editor window is unfocused; restored in End().
+            _previousRunInBackground = Application.runInBackground;
+            Application.runInBackground = true;
+
             AgentEvents.Emitted -= OnEvent;
             AgentEvents.Emitted += OnEvent;
             IsActive = true;
@@ -88,6 +93,7 @@ namespace AgentPlay.Editor
         {
             if (!IsActive) return;
             AgentEvents.Emitted -= OnEvent;
+            Application.runInBackground = _previousRunInBackground;
             _server?.Dispose();
             _trace?.Dispose();
             _server = null;
