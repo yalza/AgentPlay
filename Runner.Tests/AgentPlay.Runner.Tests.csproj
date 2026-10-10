@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Contract\AgentPlay.Contract.csproj" />
+    <ProjectReference Include="..\Runner\AgentPlay.Runner.csproj" />
   </ItemGroup>
 
 </Project>
