@@ -12,17 +12,17 @@ Opus 5.5 tự chơi hai game Unity khác nhau ở chế độ theo lượt, qua 
 
 ### Đã chốt với người dùng
 
-- Phạm vi: một game demo "trộm nhỏ" trong Testbed của AgentPlay chứng minh vòng chơi đầy đủ (bảo vệ đi tuần, lấy đồ, thoát ra). TileThieves chỉ dùng phần game đang có: cạy gạch, nhặt gạch, giữ ồn thấp. TileThieves chưa có bảo vệ trong scene và chưa có VanZone; khi có thì chỉ cần mở rộng adapter.
+- Phạm vi: một game demo "trộm nhỏ" trong project Unity riêng `Demos/Heist` của repo AgentPlay chứng minh vòng chơi đầy đủ (bảo vệ đi tuần, lấy đồ, thoát ra). TileThieves chỉ dùng phần game đang có: cạy gạch, nhặt gạch, giữ ồn thấp. TileThieves chưa có bảo vệ trong scene và chưa có VanZone; khi có thì chỉ cần mở rộng adapter.
 - Executor chạy trong Unity; Opus trả kế hoạch JSON có luật ứng phó (cách A).
 - Adapter TileThieves là asmdef riêng, đọc trạng thái qua API public, lái nhân vật bằng tay cầm ảo, chỉ biên dịch khi có package AgentPlay. Package được gắn qua junction git-ignore nên `manifest.json` của nhóm không đổi.
 - Agent phải chạy được ở mọi project Unity, không riêng TileThieves (mục 2).
 
 ### Định nghĩa "xong"
 
-1. **Testbed, model giả theo kịch bản:** E2E tự động, không gọi API, agent lấy đủ 3 món và thoát ra. Chạy được bất kỳ lúc nào, không tốn tiền.
-2. **Testbed, Opus thật:** trong 5 lần chạy theo lượt, ít nhất 3 lần Opus lấy đủ 3 món và thoát mà không bị bắt. Mỗi lần chạy giới hạn 40 lượt gọi model.
+1. **Heist, model giả theo kịch bản:** E2E tự động, không gọi API, agent lấy đủ 3 món và thoát ra. Chạy được bất kỳ lúc nào, không tốn tiền.
+2. **Heist, Opus thật:** trong 5 lần chạy theo lượt, ít nhất 3 lần Opus lấy đủ 3 món và thoát mà không bị bắt. Mỗi lần chạy giới hạn 40 lượt gọi model.
 3. **TileThieves, Opus thật:** trong scene `Prototype_Pry`, Opus tự cạy và nhặt đủ số viên ghi trong `brief.md` (mặc định 6) mà mức ồn không lên mức cao nhất, trong 3 lần chạy liên tiếp.
-4. **Tổng quát:** không file nào trong `Packages/com.agentplay.core` và `Runner/` nhắc tới Testbed hay TileThieves; script `Tools/check-generic.sh` kiểm điều này và nằm trong bộ kiểm tra cuối.
+4. **Tổng quát:** không file nào trong `Packages/com.agentplay.core` và `Runner/` nhắc tới Testbed, Heist hay TileThieves; script `Tools/check-generic.sh` kiểm điều này và nằm trong bộ kiểm tra cuối.
 5. Trace của phiên agent ghi đủ từng Plan và kết quả của nó.
 
 ### Ngoài phạm vi M2
@@ -46,7 +46,7 @@ Opus 5.5 tự chơi hai game Unity khác nhau ở chế độ theo lượt, qua 
   - file `AgentPlay/brief.md` ở gốc project: mục tiêu, luật thắng thua, mẹo. Unity đọc file này lúc bắt đầu phiên và gửi trong `hello.brief`. Thiếu file thì `brief` rỗng và runner cảnh báo.
 - **Gắn package vào project bất kỳ:** script `Tools/link-agentplay.ps1 <đường dẫn project>` tạo junction `Packages/com.agentplay.core` trỏ về package và thêm dòng git-ignore. Unity coi đây là embedded package, không cần sửa `manifest.json`. Adapter đặt trong asmdef có `defineConstraints` theo `versionDefines` của package, nên project vẫn biên dịch khi không có AgentPlay.
 - **Kết thúc ván:** hai tên sự kiện dành riêng `game.won` và `game.lost` (kèm `outcome`). Runner dừng gọi model khi nhận một trong hai và ghi kết quả.
-- **Kiểm tra:** `Tools/check-generic.sh` tìm chuỗi `TileThieves` và `Testbed` (không phân biệt hoa thường) trong `Packages/com.agentplay.core/{Contract,Runtime,Editor}` và `Runner/`; có kết quả là fail.
+- **Kiểm tra:** `Tools/check-generic.sh` tìm chuỗi `TileThieves`, `Testbed` và `Heist` (không phân biệt hoa thường) trong `Packages/com.agentplay.core/{Contract,Runtime,Editor}` và `Runner/`; có kết quả là fail.
 
 ---
 
@@ -107,7 +107,7 @@ Opus 5.5 tự chơi hai game Unity khác nhau ở chế độ theo lượt, qua 
 
 ### Ngữ nghĩa
 
-- **Bước:** Executor gọi method action mỗi frame tới khi nó trả `Done` hoặc `Failed`. Có `until` thì điều kiện được kiểm mỗi frame sau lời gọi; đúng thì bước coi như xong dù action trả `Running`. `Failed` thì Plan hỏng với lý do `action_failed:<tên>`.
+- **Bước:** Executor gọi method action mỗi frame tới khi nó trả `Done` hoặc `Failed`. Có `until` thì điều kiện được kiểm mỗi frame sau lời gọi; đúng thì bước coi như xong dù action trả `Running`. `Failed` thì Plan hỏng với lý do `action_failed:<tên>`. Điều kiện `until` được đánh giá trên snapshot chụp đầu frame.
 - **Luật:** mỗi frame, trước khi chạy bước, kiểm `when` của từng luật theo thứ tự. Luật chỉ bắn ở sườn lên (điều kiện từ sai thành đúng), để không bắn lặp lại mỗi frame. Khi bắn: chạy action `do` của luật tới khi `Done` hoặc `Failed`, rồi làm theo `then`: `resume` quay lại bước đang dở (gọi lại với `IsFirstFrame = true`), `next` sang bước kế, `replan` kết thúc Plan với lý do `replan:<chỉ số luật>`, `abort` kết thúc Plan và chạy `Safe`. Trong lúc luật đang chạy action, các luật khác vẫn được kiểm và có thể ngắt.
 - **Hết giờ:** `timeout_s` tính bằng giây game; hết thì Plan hỏng với lý do `timeout`.
 - **Hành vi an toàn:** khi không có Plan, Executor gọi action có `Safe = true` mỗi frame. Action `Safe` không được có tham số (registry báo lỗi nếu có).
@@ -165,7 +165,7 @@ Editor dừng và gửi `paused` khi: Plan xong (`plan_done`), Plan hỏng (`pla
 - **Lỗi API:** quá 60 giây hoặc lỗi mạng thì thử lại một lần sau 2 giây; vẫn lỗi thì để game ở hành vi an toàn, chờ 10 giây rồi thử tiếp. Ở chế độ theo lượt, game đang dừng nên không có hậu quả gameplay.
 - **Giới hạn chi phí:** `--max-calls` (mặc định 40) mỗi phiên; đạt giới hạn thì runner dừng gọi model, in tổng token và thoát.
 - **Cấu hình:** `runner.json` cạnh file chạy chứa model id (mặc định `claude-opus-5-5`), `max_tokens`, giới hạn. Khóa API đọc từ biến môi trường `ANTHROPIC_API_KEY`, không ghi vào file.
-- **Chế độ bộ não:** `--brain opus` (mặc định), `--brain script <file>` (đọc chuỗi Plan định sẵn, dùng cho E2E không tốn tiền), `--brain manual` (in trạng thái, chờ dán Plan JSON; để debug).
+- **Chế độ bộ não:** `--brain opus` (mặc định), `--brain script <file>` (đọc chuỗi Plan định sẵn, dùng cho E2E không tốn tiền), `--brain manual` (in trạng thái, chờ dán Plan JSON; để debug). M2a chỉ có `--brain script`; không có `--brain` thì runner chạy như M1. `opus` và `manual` đến ở M2b.
 - **RunLog:** `<project_root>/AgentPlay/Runs/<thời gian>.ndjson`, mỗi dòng một lượt: thời điểm, model, độ trễ, token vào, ra, đọc từ cache, Plan, kết quả. Cuối phiên ghi tổng.
 
 ---
@@ -178,18 +178,18 @@ Editor dừng và gửi `paused` khi: Plan xong (`plan_done`), Plan hỏng (`pla
 
 ---
 
-## 10. Game demo trong Testbed: "trộm nhỏ"
+## 10. Game demo `Demos/Heist`: "trộm nhỏ"
 
-Toàn bộ code demo nằm trong `Testbed/Assets/Demo/`, không nằm trong package.
+Toàn bộ code demo nằm trong project Unity riêng `Demos/Heist` (một project chỉ có một `[AgentGame]`; `Testbed` giữ cho test package và E2E M1).
 
-- **Bản đồ:** sàn 20 × 12 m, 3 món đồ (`item_a`, `item_b`, `item_c`), 2 vật che (`cover_1`, `cover_2`), cửa thoát `exit`, điểm xuất phát `start`. Các vùng có tên được nối bằng một đồ thị điểm đi cố định; `goto` đi theo đường ngắn nhất trên đồ thị.
-- **Bảo vệ:** đi vòng qua 4 điểm tuần tra, tầm nhìn hình nón 70° và 7 m, bị vật che chặn (raycast). Nhân vật đang `hide` sau vật che thì không bị nhìn thấy từ phía bên kia.
+- **Bản đồ:** sàn 20 × 12 m, 3 món đồ (`item_a`, `item_b`, `item_c`), 2 vật che (`cover_1`, `cover_2`), cửa thoát `exit`, điểm xuất phát `start`. `goto` đi thẳng tới vùng; sàn trống nên không cần tìm đường.
+- **Bảo vệ:** đi qua lại trên đường x = 6 giữa z = 5 và z = -5, tầm nhìn 7 m, nửa góc 35°, bị vật che chặn (raycast). Nhân vật đang `hide` sau vật che thì không bị nhìn thấy từ phía bên kia.
 - **Luật:** bị nhìn thấy liên tục 1,5 giây thì bảo vệ đuổi; bảo vệ tới cách 1 m thì bị bắt (`game.lost`). Vào `exit` khi đã cầm đủ 3 món thì thắng (`game.won`).
-- **Observe:** `player.pos`, `player.zone`, `player.carrying`, `player.hidden`; danh sách `guards` với `distance`, `sees_player`, `chasing`, `zone`.
+- **Observe:** `player.pos`, `player.zone`, `player.carrying`, `player.crouched`, `player.hidden`, `items.left`; danh sách `guards` với `distance`, `sees_player`, `chasing`, `moving_north`, `x`, `z`, `zone`.
 - **Action:** `goto(zone)`, `pick(item)` (phải đứng trong 1,5 m), `hide(zone)`, `wait(seconds)`, `stop()` (an toàn).
 - **Sự kiện đã khai báo:** `item.picked`, `guard.spotted` (quan trọng, xấu), `guard.lost_sight`, `game.won` (tốt), `game.lost` (xấu).
-- **`AgentPlay/brief.md`** của Testbed mô tả mục tiêu và luật trên.
-- **Kịch bản cho model giả:** `Testbed/AgentPlay/scripts/win.json`, chuỗi Plan đủ để thắng khi bảo vệ chạy theo lộ trình xác định. Bảo vệ không có yếu tố ngẫu nhiên.
+- **`AgentPlay/brief.md`** của Heist mô tả mục tiêu và luật trên.
+- **Kịch bản cho model giả:** `Demos/Heist/AgentPlay/scripts/win.json`, chuỗi Plan đủ để thắng khi bảo vệ chạy theo lộ trình xác định. Bảo vệ không có yếu tố ngẫu nhiên.
 
 ---
 
@@ -232,8 +232,8 @@ Code adapter nằm trong repo TileThieves, thư mục `Assets/_Project/Scripts/A
 - **Contract (xUnit):** parser và evaluator điều kiện (ưu tiên toán tử, hàm danh sách, null, sai kiểu), `PlanValidator` (mọi loại lỗi), schema Plan khớp kiểu C#.
 - **Runtime (EditMode):** `ExecutorCore` với action giả: bước, `until`, luật sườn lên, bốn kiểu `then`, timeout, action ném lỗi, hành vi an toàn; `ActionInvoker`; `[AgentObserveList]`; `[AgentEventInfo]`; `SessionCore` với `plan` và các lần dừng mục 7.
 - **Runner (xUnit):** `SessionLoop` với `ScriptedModelClient` và `IModelClient` giả trả Plan sai, lỗi mạng, hết giới hạn lượt; `PromptBuilder` (phần cache không đổi giữa các lượt).
-- **E2E tự động:** Testbed với `--brain script` (tiêu chí 1), kiểm bằng script Python như M1.
-- **E2E có tốn tiền, chạy tay:** Testbed với Opus (tiêu chí 2), TileThieves với Opus (tiêu chí 3). Kết quả ghi vào `docs/notes/m2-verification.md` kèm tổng token và chi phí ước tính.
+- **E2E tự động:** Heist với `--brain script` (tiêu chí 1), kiểm bằng script Python như M1.
+- **E2E có tốn tiền, chạy tay:** Heist với Opus (tiêu chí 2), TileThieves với Opus (tiêu chí 3). Kết quả ghi vào `docs/notes/m2-verification.md` kèm tổng token và chi phí ước tính.
 - **Tổng quát:** `Tools/check-generic.sh` (tiêu chí 4).
 
 ---
@@ -244,7 +244,7 @@ M2 chia làm ba plan, mỗi plan tự kiểm được:
 
 | Plan | Nội dung | Xong khi |
 | --- | --- | --- |
-| **M2a: Động cơ** | Điều kiện, Plan, validator, executor, observe danh sách, event info, giao thức v2, `brief`, game demo Testbed, `--brain script`, `check-generic.sh`, `link-agentplay.ps1` | Tiêu chí 1 và 4 |
+| **M2a: Động cơ** | Điều kiện, Plan, validator, executor, observe danh sách, event info, giao thức v2, `brief`, game demo Heist, `--brain script`, `check-generic.sh`, `link-agentplay.ps1` | Tiêu chí 1 và 4 |
 | **M2b: Bộ não Opus** | Kiểm tra SDK, `ModelClient`, `PromptBuilder`, `SessionLoop`, giới hạn chi phí, `RunLog` | Tiêu chí 2 và 5 |
 | **M2c: TileThieves** | `VirtualGamepad`, adapter TileThieves, `brief.md`, junction | Tiêu chí 3 |
 
@@ -253,7 +253,7 @@ M2 chia làm ba plan, mỗi plan tự kiểm được:
 ## 16. Rủi ro và điều chưa kiểm chứng
 
 1. SDK `Anthropic` có hỗ trợ `cache_control` và `tool_choice` bắt buộc không: kiểm ở bước đầu M2b; dự phòng là HTTP trực tiếp.
-2. Opus có viết được Plan nhiều bước đủ tốt để thắng 3/5 ván Testbed không: chỉ biết sau M2b. Nếu không đạt, giảm độ dài Plan và thêm ví dụ Plan mẫu vào phần cache.
+2. Opus có viết được Plan nhiều bước đủ tốt để thắng 3/5 ván Heist không: chỉ biết sau M2b. Nếu không đạt, giảm độ dài Plan và thêm ví dụ Plan mẫu vào phần cache.
 3. Junction trong `Packages/` được Unity nhận là embedded package và `versionDefines` hoạt động với nó: kiểm ở đầu M2c.
 4. Tay cầm ảo được `ThiefInput` của TileThieves nhận khi Editor không có focus: kiểm ở đầu M2c.
 5. Nhắm ô gạch bằng vòng điều khiển kín có hội tụ không, với độ nhạy tay cầm 180°/giây của TileThieves: kiểm ở M2c; dự phòng là giảm biên độ stick khi gần mục tiêu.
