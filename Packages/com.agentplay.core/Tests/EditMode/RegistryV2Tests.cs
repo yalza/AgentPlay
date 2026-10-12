@@ -104,6 +104,24 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void MissingListInstanceIsNullSoConditionsAreFalse()
+        {
+            var model = AgentRegistry.Build(new[] { typeof(FakeHeist) });
+            var s = SnapshotBuilder.Build(model, t => null);
+            Assert.AreEqual(Newtonsoft.Json.Linq.JTokenType.Null, s["guards"].Type);
+        }
+
+        [Test]
+        public void ThrowingListGetterIsNull()
+        {
+            var model = AgentRegistry.Build(new[] { typeof(FakeThrowingList) });
+            var warnings = new List<string>();
+            var s = SnapshotBuilder.Build(model, t => new FakeThrowingList(), warnings.Add);
+            Assert.AreEqual(Newtonsoft.Json.Linq.JTokenType.Null, s["broken"].Type);
+            Assert.AreEqual(1, warnings.Count);
+        }
+
+        [Test]
         public void EventOnlyClassIsAnnotated()
         {
             Assert.IsTrue(TypeScanner.IsAnnotated(typeof(FakeDupEvents)));

@@ -124,12 +124,9 @@ namespace AgentPlay.Runner
                 if (!cts.IsCancellationRequested && !session.Finished) Log("disconnected; waiting for Unity Play mode");
             }
 
-            if (session.Finished)
-            {
-                Log("finished with exit code " + session.ExitCode);
-                return session.ExitCode;
-            }
-            return 0;
+            if (session.Finished) Log("finished with exit code " + session.ExitCode);
+            else if (session.ExitCodeOnStop != 0) Log("stopped before the run finished; exit code " + session.ExitCodeOnStop);
+            return session.ExitCodeOnStop;
         }
 
         static async Task Send(BridgeClient client, Outgoing msg, CancellationToken ct)

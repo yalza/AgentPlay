@@ -46,6 +46,32 @@ namespace AgentPlay.Runner.Tests.Contract
             Assert.Throws<ConditionException>(() => ConditionParser.Parse(text));
         }
 
+        [Theory]
+        [InlineData(200, '(')]
+        [InlineData(200, '!')]
+        public void DeepNestingIsRejectedInsteadOfOverflowingTheStack(int depth, char opener)
+        {
+            var text = opener == '('
+                ? new string('(', depth) + "a > 1" + new string(')', depth)
+                : new string('!', depth) + "a";
+            var e = Assert.Throws<ConditionException>(() => ConditionParser.Parse(text));
+            Assert.Contains("nested too deeply", e.Message);
+        }
+
+        [Fact]
+        public void VeryLongConditionIsRejected()
+        {
+            var text = string.Join(" && ", System.Linq.Enumerable.Repeat("a > 1", 400));
+            var e = Assert.Throws<ConditionException>(() => ConditionParser.Parse(text));
+            Assert.Contains("longer than", e.Message);
+        }
+
+        [Fact]
+        public void ModerateNestingStillParses()
+        {
+            Assert.Equal("(a > 1)", ConditionParser.Parse(new string('(', 20) + "a > 1" + new string(')', 20)).ToString());
+        }
+
         [Fact]
         public void ErrorReportsPosition()
         {

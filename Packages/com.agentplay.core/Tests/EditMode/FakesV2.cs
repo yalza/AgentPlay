@@ -38,6 +38,12 @@ namespace AgentPlay.Tests
     [AgentEventInfo("dup")]
     public class FakeDupEvents { }
 
+    public class FakeThrowingList
+    {
+        [AgentObserveList("broken")]
+        public IEnumerable<FakeGuardView> Broken => throw new System.InvalidOperationException("no guards");
+    }
+
     public class FakeManyGuards
     {
         [AgentObserveList("crowd")]

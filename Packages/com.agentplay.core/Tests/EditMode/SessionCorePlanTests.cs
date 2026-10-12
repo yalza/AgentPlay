@@ -109,6 +109,28 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void InvalidPlanWhileRunningStaysPausedThroughTheResumeThatFollows()
+        {
+            TurnBasedRunning();
+            _core.OnLine(PlanLine(InvalidPlan));
+            _core.OnLine(Line(MessageTypes.Resume, new ResumeMessage { MaxGameSeconds = 0 }));
+            Assert.IsTrue(_host.Paused);
+            Assert.AreEqual(2, _host.OfType(MessageTypes.Paused).Count);
+        }
+
+        [Test]
+        public void ManualRunClearsAStaleRepause()
+        {
+            TurnBasedRunning();
+            _core.OnLine(PlanLine(InvalidPlan));
+            _host.Paused = false;          // user resumed the Editor by hand
+            _core.Tick(true);
+            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = PlanStatuses.PlanDone, PlanId = "x" } }, false);
+            _core.OnLine(Line(MessageTypes.Resume, new ResumeMessage { MaxGameSeconds = 0 }));
+            Assert.IsFalse(_host.Paused, "a resume after a later pause must run the game");
+        }
+
+        [Test]
         public void PlanEndSendsStatusWaitingThenPauses()
         {
             TurnBasedRunning();
@@ -116,7 +138,7 @@ namespace AgentPlay.Tests
             {
                 new ExecutorOutput { Kind = PlanStatuses.PlanDone, PlanId = "p1", Step = 1 },
                 new ExecutorOutput { Kind = ExecutorOutputKinds.Waiting, PlanId = "p1" },
-            });
+            }, false);
             CollectionAssert.AreEqual(new[] { MessageTypes.PlanStatus, MessageTypes.Waiting, MessageTypes.Paused },
                 _host.Sent.Select(e => e.Type).ToArray());
             Assert.AreEqual("plan", _host.Sent[2].As<PausedMessage>().Reason);
@@ -127,7 +149,7 @@ namespace AgentPlay.Tests
         [Test]
         public void PlanEndDoesNotPauseInRealtime()
         {
-            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = PlanStatuses.PlanDone, PlanId = "p1" } });
+            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = PlanStatuses.PlanDone, PlanId = "p1" } }, false);
             Assert.IsFalse(_host.Paused);
         }
 
@@ -136,9 +158,9 @@ namespace AgentPlay.Tests
         {
             TurnBasedRunning();
             _core.OnEvent(new AgentEventRecord("hit", null, true, AgentOutcome.Bad, 0, 0));
-            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = PlanStatuses.RuleFired, PlanId = "p1", Step = 0, Reason = "resume" } });
+            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = PlanStatuses.RuleFired, PlanId = "p1", Step = 0, Reason = "resume" } }, true);
             Assert.IsFalse(_host.Paused);
-            _core.OnFrameEnd(new ExecutorOutput[0]);
+            _core.OnFrameEnd(new ExecutorOutput[0], false);
             Assert.IsFalse(_host.Paused, "the important flag is cleared after the frame");
         }
 

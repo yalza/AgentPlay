@@ -30,7 +30,6 @@ namespace AgentPlay
         readonly SequenceCounter _seq = new SequenceCounter();
         readonly List<string> _recent = new List<string>();
         PauseReason _pauseReason;
-        bool _importantPending;
         bool _agentControl;
         bool _repauseOnResume;
 
@@ -98,11 +97,13 @@ namespace AgentPlay
                 Payload = rec.Payload,
                 State = state,
             });
-            if (rec.Important) _importantPending = true;   // decided in OnFrameEnd, once rules have had their chance
         }
 
-        /// <summary>Called once per game frame after the executor ran; decides turn-based stops (spec M2 section 7).</summary>
-        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs)
+        /// <summary>
+        /// Called once per game frame after the executor ran; decides turn-based stops (spec M2 section 7).
+        /// <paramref name="importantEvent"/> is true when the events the executor evaluated this frame included an important one.
+        /// </summary>
+        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs, bool importantEvent)
         {
             bool ended = false;
             bool ruleFired = false;
@@ -121,11 +122,9 @@ namespace AgentPlay
                 if (o.Kind == PlanStatuses.RuleFired) ruleFired = true;
             }
 
-            bool important = _importantPending;
-            _importantPending = false;
             var reason = PauseReason.None;
             if (ended) reason = _step.OnPlanEnded();
-            else if (important && !ruleFired) reason = _step.OnImportantEvent();
+            else if (importantEvent && !ruleFired) reason = _step.OnImportantEvent();
             if (reason != PauseReason.None) Pause(reason);
         }
 
@@ -134,6 +133,7 @@ namespace AgentPlay
         {
             if (!gameRunning) return;
             AwaitingResume = false;   // running means someone resumed, possibly by hand
+            _repauseOnResume = false;
 
             double t = _host.GameTime;
             if (_snapshotTimer.Tick(t)) _trace?.WriteSnapshot(t, _host.Frame, _snapshot());
@@ -216,13 +216,14 @@ namespace AgentPlay
                 if (AwaitingResume)
                 {
                     _pauseReason = PauseReason.Plan;
-                    _repauseOnResume = _step.Mode == Modes.TurnBased;
                 }
                 else
                 {
                     var reason = _step.OnPlanEnded();
                     if (reason != PauseReason.None) Pause(reason);
                 }
+                // The runner sends resume right after every plan; it must not run the game without one.
+                _repauseOnResume = AwaitingResume && _step.Mode == Modes.TurnBased;
                 return;
             }
             if (_executor == null)

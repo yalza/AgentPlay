@@ -22,11 +22,13 @@ namespace AgentPlay
     {
         ExecutorCore _core;
         Func<JObject> _snapshot;
-        Action<IReadOnlyList<ExecutorOutput>> _onFrame;
+        Action<IReadOnlyList<ExecutorOutput>, bool> _onFrame;
         HashSet<string> _collecting = new HashSet<string>();
         HashSet<string> _frameEvents = new HashSet<string>();
+        bool _collectingImportant;
 
-        public static AgentExecutorHost Create(ExecutorCore core, Func<JObject> snapshot, Action<IReadOnlyList<ExecutorOutput>> onFrame)
+        /// <param name="onFrame">Outputs of the frame, and whether the events it evaluated included an important one.</param>
+        public static AgentExecutorHost Create(ExecutorCore core, Func<JObject> snapshot, Action<IReadOnlyList<ExecutorOutput>, bool> onFrame)
         {
             var go = new GameObject("AgentPlay Executor") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(go);
@@ -38,18 +40,24 @@ namespace AgentPlay
             return host;
         }
 
-        void OnEvent(AgentEventRecord record) => _collecting.Add(record.Name);
+        void OnEvent(AgentEventRecord record)
+        {
+            _collecting.Add(record.Name);
+            if (record.Important) _collectingImportant = true;
+        }
 
         void Update()
         {
             if (_core == null) return;
-            // Events emitted by actions during this tick are seen by rules on the next frame.
+            // Events emitted by actions during this tick belong to the next frame, for rules and for pausing alike.
             var events = _collecting;
             _collecting = _frameEvents;
             _collecting.Clear();
             _frameEvents = events;
+            bool important = _collectingImportant;
+            _collectingImportant = false;
             var outputs = _core.Tick(Time.deltaTime, _snapshot, _frameEvents);
-            _onFrame?.Invoke(outputs);
+            _onFrame?.Invoke(outputs, important);
         }
 
         public void Load(Plan plan) => _core?.Load(plan);

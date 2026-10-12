@@ -3,8 +3,8 @@
 Ngày chạy: 2026-10-12 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 169/169 passed, 0 failed
-- `Tools/unity-tests.sh`: 101/101 passed, 0 failed
+- `dotnet test AgentPlay.sln`: 177/177 passed, 0 failed (sau vòng sửa theo review)
+- `Tools/unity-tests.sh`: 108/108 passed, 0 failed (sau vòng sửa theo review)
 - `Tools/test-link-agentplay.sh`: tất cả PASS
 - `Tools/check-generic.sh`: OK
 - `Tools/e2e-m1.sh`: ALL CHECKS PASSED (hồi quy M1, có domain reload trong Play mode)
@@ -19,3 +19,8 @@ Ngày chạy: 2026-10-12 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315)
 - Snapshot được dựng mỗi frame khi có Plan (để đánh giá điều kiện); chưa tối ưu.
 - Sự kiện phát ra trong lúc action chạy chỉ được luật nhìn thấy ở frame sau.
 - Tên hàm điều kiện (`min`, `max`, `count`, `any`) là từ khóa, không dùng làm tên observe.
+- Hai Editor cùng chạy AgentPlay: chưa xử lý (hoãn từ M1).
+- Chưa phát sự kiện `agent.action_error` và chưa cảnh báo khi game thiếu action `Safe` (spec M2 mục 13); action `Safe` ném lỗi thì bị bỏ qua không log.
+- Registry chưa kiểm tên observe/sự kiện theo ngữ pháp điều kiện (chữ hoa, gạch ngang, tên hàm `min/max/count/any`).
+- Cờ `Important` khai báo trong `[AgentEventInfo]` và cờ truyền vào `Emit` là hai nguồn riêng.
+- Package chưa có trạng thái "hết ván": sau `game.won`/`game.lost` executor vẫn chạy action.

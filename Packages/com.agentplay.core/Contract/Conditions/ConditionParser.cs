@@ -10,9 +10,14 @@ namespace AgentPlay.Contract
 
         static readonly string[] CompareOps = { "<=", ">=", "==", "!=", "<", ">" };
 
+        /// <summary>Conditions come from a model; bound them so a hostile one cannot overflow the stack.</summary>
+        public const int MaxLength = 1000;
+        public const int MaxDepth = 32;
+
         public static CondNode Parse(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) throw new ConditionException("Empty condition", 0);
+            if (text.Length > MaxLength) throw new ConditionException("Condition is longer than " + MaxLength + " characters", MaxLength);
             var p = new Impl(text);
             var node = p.ParseOr();
             p.SkipWhitespace();
@@ -24,6 +29,7 @@ namespace AgentPlay.Contract
         {
             readonly string _s;
             public int Index;
+            int _depth;
 
             public Impl(string s)
             {
@@ -69,7 +75,10 @@ namespace AgentPlay.Contract
                 if (!AtEnd && Current == '!' && At(1) != '=')
                 {
                     Index++;
-                    return new NotNode(ParseUnary());
+                    Enter();
+                    var operand = ParseUnary();
+                    _depth--;
+                    return new NotNode(operand);
                 }
                 return ParseCompare();
             }
@@ -90,8 +99,10 @@ namespace AgentPlay.Contract
                 if (c == '(')
                 {
                     Index++;
+                    Enter();
                     var inner = ParseOr();
                     if (!Match(")")) throw new ConditionException("Expected ')'", Index);
+                    _depth--;
                     return inner;
                 }
                 if (c == '\'') return ParseString();
@@ -99,6 +110,11 @@ namespace AgentPlay.Contract
                     return ParseNumber();
                 if (IsIdentStart(c)) return ParseWord();
                 throw new ConditionException("Unexpected '" + c + "'", Index);
+            }
+
+            void Enter()
+            {
+                if (++_depth > MaxDepth) throw new ConditionException("Condition is nested too deeply (more than " + MaxDepth + " levels)", Index);
             }
 
             CondNode ParseString()

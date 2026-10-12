@@ -24,10 +24,13 @@ namespace AgentPlay.Runner
         public const int ExitLost = 3;
         public const int ExitBrainStopped = 4;
         public const int ExitProtocol = 5;
+        public const int ExitNotFinished = 6;
 
         readonly RunnerOptions _options;
         readonly Action<string> _print;
         readonly BrainContext _context = new BrainContext();
+        /// <summary>Game time of the pause the last plan answered; a repeat announcement of it is ignored.</summary>
+        double? _answeredPauseT;
 
         public bool HasHello { get; private set; }
         public HelloMessage Hello { get; private set; }
@@ -36,6 +39,8 @@ namespace AgentPlay.Runner
         public string GameResult { get; private set; }
         public bool Finished { get; private set; }
         public int ExitCode { get; private set; }
+        /// <summary>Exit code when the runner stops: the result if the run finished, else 6 in brain mode (Unity went away).</summary>
+        public int ExitCodeOnStop => Finished ? ExitCode : BrainMode ? ExitNotFinished : 0;
 
         bool BrainMode => _options.Brain != null;
 
@@ -50,6 +55,8 @@ namespace AgentPlay.Runner
             HasHello = false;
             Hello = null;
             DecisionPending = false;
+            GameResult = null;
+            _answeredPauseT = null;
         }
 
         public IReadOnlyList<Outgoing> Handle(Envelope env)
@@ -92,6 +99,7 @@ namespace AgentPlay.Runner
             }
             _context.PlansSent++;
             _context.LastPlan = plan;
+            _answeredPauseT = _context.PauseT;
             _context.RecentEvents.Clear();
             _context.PlanStatuses.Clear();
             _print("sent plan " + plan.Id + ": " + plan.Intent);
@@ -143,10 +151,16 @@ namespace AgentPlay.Runner
                             _print("game over: " + GameResult);
                             Finish(GameResult == "won" ? ExitWon : ExitLost);
                         }
+                        else if (_answeredPauseT == p.T)
+                        {
+                            // Unity announces a pause again on set_mode or reconnect; the plan already sent answers it.
+                            _print("(already answered this pause)");
+                        }
                         else
                         {
                             _context.State = p.State;
                             _context.PauseReason = p.Reason;
+                            _context.PauseT = p.T;
                             DecisionPending = true;
                         }
                     }
@@ -165,6 +179,7 @@ namespace AgentPlay.Runner
                     var s = env.As<PlanStatusMessage>();
                     _print("plan_status " + s.PlanId + " " + s.Status + " step=" + s.Step + " reason=" + s.Reason);
                     _context.PlanStatuses.Add(s);
+                    if (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) _answeredPauseT = null;
                     break;
 
                 case MessageTypes.Waiting:

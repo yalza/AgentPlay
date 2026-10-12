@@ -163,6 +163,58 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void UnfinishedBrainRunHasANonZeroExitCode()
+        {
+            var s = Session();
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            Assert.False(s.Finished);
+            Assert.Equal(RunnerSession.ExitNotFinished, s.ExitCodeOnStop);
+            var plain = new RunnerSession(RunnerOptions.Parse(new string[0]), _printed.Add);
+            Assert.Equal(0, plain.ExitCodeOnStop);
+        }
+
+        [Fact]
+        public void SecondPausedForTheSamePauseIsIgnored()
+        {
+            var s = Session();
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 1.5 }));
+            s.TakeDecisionContext();
+            s.OnPlan(GotoPlan("p1"));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 1.5 }));
+            Assert.False(s.DecisionPending, "the same pause announced twice must not trigger a second decision");
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "plan", T = 4.0 }));
+            Assert.True(s.DecisionPending, "a later pause needs a new decision");
+        }
+
+        [Fact]
+        public void RejectedPlanRePauseAtTheSameTimeNeedsANewDecision()
+        {
+            var s = Session();
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 1.5 }));
+            s.TakeDecisionContext();
+            s.OnPlan(GotoPlan("p1"));
+            s.Handle(Env(MessageTypes.PlanStatus, new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.PlanFailed, Reason = "invalid: x" }));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "plan", T = 1.5 }));
+            Assert.True(s.DecisionPending);
+        }
+
+        [Fact]
+        public void ReconnectForgetsTheOldGameResult()
+        {
+            var s = Session();
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Event, new EventMessage { Name = ReservedEvents.GameWon, T = 5 }));
+            s.Reset();
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 0.5 }));
+            Assert.False(s.Finished);
+            Assert.Null(s.GameResult);
+            Assert.True(s.DecisionPending);
+        }
+
+        [Fact]
         public void ScriptBrainReturnsPlansInOrderThenNull()
         {
             var path = Path.Combine(Path.GetTempPath(), "agentplay-script-" + Guid.NewGuid().ToString("N") + ".json");

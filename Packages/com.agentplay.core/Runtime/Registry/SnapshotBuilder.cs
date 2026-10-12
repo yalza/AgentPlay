@@ -23,7 +23,7 @@ namespace AgentPlay
                     target = resolveInstance(e.DeclaringType);
                     if (target == null)
                     {
-                        o[e.Path] = e.ValueKind == ValueKinds.List ? (JToken)new JArray() : JValue.CreateNull();
+                        o[e.Path] = JValue.CreateNull();
                         continue;
                     }
                 }
@@ -32,10 +32,12 @@ namespace AgentPlay
             return o;
         }
 
+        /// <summary>Null when the list cannot be read (conditions over it are then false); [] when it is empty or null.</summary>
         static JToken ReadList(ObserveEntry e, object target, Action<string> warn)
         {
             var array = new JArray();
-            if (!(ReadRaw(e, target, warn, out var raw) && raw is IEnumerable items)) return array;
+            if (!ReadRaw(e, target, warn, out var raw)) return JValue.CreateNull();
+            if (!(raw is IEnumerable items)) return array;
             foreach (var item in items)
             {
                 if (item == null) continue;

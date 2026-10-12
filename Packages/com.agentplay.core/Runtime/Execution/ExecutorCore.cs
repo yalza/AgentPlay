@@ -35,6 +35,7 @@ namespace AgentPlay
         CondNode[] _until;
         CondNode[] _when;
         bool[] _ruleWasTrue;
+        bool[] _rulePending;
         int _step;
         int _activeRule = -1;
         double _planTime;
@@ -63,6 +64,7 @@ namespace AgentPlay
             _plan = plan;
             _plan.Rules = rules;
             _ruleWasTrue = new bool[_when.Length];
+            _rulePending = new bool[_when.Length];
             _step = 0;
             _activeRule = -1;
             _planTime = 0;
@@ -94,15 +96,19 @@ namespace AgentPlay
             }
 
             var context = new SnapshotContext(snapshot(), events);
+            // A rule whose condition rose stays pending until it gets to fire, so one outranked in the
+            // same frame (or rising while it already runs) is not lost.
             int fire = -1;
             for (int i = 0; i < _when.Length; i++)
             {
                 bool now = ConditionEvaluator.Evaluate(_when[i], context);
-                if (now && !_ruleWasTrue[i] && fire < 0 && i != _activeRule) fire = i;
+                if (now && !_ruleWasTrue[i]) _rulePending[i] = true;
                 _ruleWasTrue[i] = now;
+                if (fire < 0 && _rulePending[i] && i != _activeRule) fire = i;
             }
             if (fire >= 0)
             {
+                _rulePending[fire] = false;
                 _activeRule = fire;
                 Reset(_ruleContext);
                 outputs.Add(new ExecutorOutput { Kind = PlanStatuses.RuleFired, PlanId = _plan.Id, Step = fire, Reason = _plan.Rules[fire].Then });

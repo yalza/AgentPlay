@@ -201,6 +201,43 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void TwoRulesRisingTogetherBothFire()
+        {
+            _runner.Behaviour["a"] = _ => AgentActionStatus.Running;
+            _runner.Behaviour["r0"] = _ => AgentActionStatus.Done;
+            _runner.Behaviour["r1"] = _ => AgentActionStatus.Done;
+            var plan = Plan(Step("a"));
+            plan.Rules.Add(Rule("x > 1", "r0", "resume"));
+            plan.Rules.Add(Rule("x > 2", "r1", "abort"));
+            _core.Load(plan);
+            Tick();
+            _state["x"] = 3;
+            var first = Tick();
+            Assert.AreEqual("rule_fired", Kinds(first));
+            Assert.AreEqual(0, first[0].Step);
+            var second = Tick();
+            Assert.AreEqual("rule_fired,plan_failed,waiting", Kinds(second));
+            Assert.AreEqual(1, second[0].Step);
+            Assert.AreEqual("abort:1", second[1].Reason);
+        }
+
+        [Test]
+        public void OutrankedEventRuleStillFiresNextFrame()
+        {
+            int r0Frames = 0;
+            _runner.Behaviour["a"] = _ => AgentActionStatus.Running;
+            _runner.Behaviour["r0"] = _ => ++r0Frames < 3 ? AgentActionStatus.Running : AgentActionStatus.Done;
+            _runner.Behaviour["r1"] = _ => AgentActionStatus.Done;
+            var plan = Plan(Step("a"));
+            plan.Rules.Add(Rule("event:hit", "r0", "resume"));
+            plan.Rules.Add(Rule("event:hit", "r1", "abort"));
+            _core.Load(plan);
+            _events.Add("hit");
+            Assert.AreEqual("rule_fired", Kinds(Tick()));
+            Assert.AreEqual("rule_fired,plan_failed,waiting", Kinds(Tick()), "an event rule still fires the frame after it was outranked");
+        }
+
+        [Test]
         public void ConditionTrueAtPlanStartFiresImmediately()
         {
             _runner.Behaviour["a"] = _ => AgentActionStatus.Running;
