@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using AgentPlay.Contract;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -52,6 +53,30 @@ namespace AgentPlay
                 ["t"] = t,
                 ["frame"] = frame,
                 ["state"] = state,
+            });
+        }
+
+        /// <summary>Marks who controls the player from here on ("agent" once the runner sends its first plan).</summary>
+        public void WriteControl(string who, double t)
+        {
+            WriteLine(new JObject { ["type"] = "control", ["t"] = t, ["who"] = who });
+        }
+
+        public void WritePlan(JObject plan, double t)
+        {
+            WriteLine(new JObject { ["type"] = "plan", ["t"] = t, ["plan"] = plan });
+        }
+
+        public void WritePlanStatus(PlanStatusMessage status, double t)
+        {
+            WriteLine(new JObject
+            {
+                ["type"] = "plan_status",
+                ["t"] = t,
+                ["plan_id"] = status.PlanId,
+                ["status"] = status.Status,
+                ["step"] = status.Step,
+                ["reason"] = status.Reason,
             });
         }
 

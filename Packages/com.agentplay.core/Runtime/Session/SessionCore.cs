@@ -25,22 +25,28 @@ namespace AgentPlay
         readonly ISessionHost _host;
         readonly TraceWriter _trace;
         readonly IntervalTimer _snapshotTimer;
+        readonly IPlanExecutor _executor;
         readonly StepPolicy _step = new StepPolicy();
         readonly SequenceCounter _seq = new SequenceCounter();
         readonly List<string> _recent = new List<string>();
         PauseReason _pauseReason;
+        bool _importantPending;
+        bool _agentControl;
+        bool _repauseOnResume;
 
         public string Mode => _step.Mode;
         public int EventCount { get; private set; }
         public IReadOnlyList<string> RecentEvents => _recent;
         public bool AwaitingResume { get; private set; }
 
-        public SessionCore(HelloMessage hello, Func<JObject> snapshot, ISessionHost host, TraceWriter trace, double snapshotIntervalSeconds)
+        public SessionCore(HelloMessage hello, Func<JObject> snapshot, ISessionHost host, TraceWriter trace,
+            double snapshotIntervalSeconds, IPlanExecutor executor = null)
         {
             _hello = hello;
             _snapshot = snapshot;
             _host = host;
             _trace = trace;
+            _executor = executor;
             _snapshotTimer = new IntervalTimer(snapshotIntervalSeconds);
         }
 
@@ -92,12 +98,35 @@ namespace AgentPlay
                 Payload = rec.Payload,
                 State = state,
             });
+            if (rec.Important) _importantPending = true;   // decided in OnFrameEnd, once rules have had their chance
+        }
 
-            if (rec.Important)
+        /// <summary>Called once per game frame after the executor ran; decides turn-based stops (spec M2 section 7).</summary>
+        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs)
+        {
+            bool ended = false;
+            bool ruleFired = false;
+            double t = _host.GameTime;
+            foreach (var o in outputs)
             {
-                var reason = _step.OnImportantEvent();
-                if (reason != PauseReason.None) Pause(reason);
+                if (o.Kind == ExecutorOutputKinds.Waiting)
+                {
+                    Send(MessageTypes.Waiting, new WaitingMessage { T = t });
+                    continue;
+                }
+                var status = new PlanStatusMessage { PlanId = o.PlanId, Status = o.Kind, Step = o.Step, Reason = o.Reason };
+                _trace?.WritePlanStatus(status, t);
+                Send(MessageTypes.PlanStatus, status);
+                if (o.Kind == PlanStatuses.PlanDone || o.Kind == PlanStatuses.PlanFailed) ended = true;
+                if (o.Kind == PlanStatuses.RuleFired) ruleFired = true;
             }
+
+            bool important = _importantPending;
+            _importantPending = false;
+            var reason = PauseReason.None;
+            if (ended) reason = _step.OnPlanEnded();
+            else if (important && !ruleFired) reason = _step.OnImportantEvent();
+            if (reason != PauseReason.None) Pause(reason);
         }
 
         /// <summary>Call every Editor update. gameRunning = Play mode and not paused.</summary>
@@ -131,12 +160,19 @@ namespace AgentPlay
                     else
                     {
                         AwaitingResume = false;
+                        _repauseOnResume = false;
                         _host.SetPaused(false);
                     }
                     return;
 
                 case MessageTypes.Resume:
                     var resume = env.As<ResumeMessage>();
+                    if (_repauseOnResume)
+                    {
+                        _repauseOnResume = false;
+                        AnnouncePause();   // the plan sent with this resume was rejected; stay paused
+                        return;
+                    }
                     _step.OnResume(_host.GameTime, resume.MaxGameSeconds);
                     AwaitingResume = false;
                     _host.SetPaused(false);
@@ -146,10 +182,62 @@ namespace AgentPlay
                     Send(MessageTypes.State, new StateMessage { T = _host.GameTime, Frame = _host.Frame, State = _snapshot() });
                     return;
 
+                case MessageTypes.Plan:
+                    HandlePlan(env);
+                    return;
+
+                case MessageTypes.StopPlan:
+                    _executor?.Stop();
+                    Send(MessageTypes.Waiting, new WaitingMessage { T = _host.GameTime });
+                    return;
+
                 default:
                     SendError("Unknown message type '" + env.Type + "'");
                     return;
             }
+        }
+
+        void HandlePlan(Envelope env)
+        {
+            var plan = env.As<PlanMessage>().Plan;
+            double t = _host.GameTime;
+            var errors = PlanValidator.Validate(plan, _hello);
+            if (errors.Count > 0)
+            {
+                var status = new PlanStatusMessage
+                {
+                    PlanId = plan?.Id,
+                    Status = PlanStatuses.PlanFailed,
+                    Step = 0,
+                    Reason = "invalid: " + string.Join("; ", errors),
+                };
+                _trace?.WritePlanStatus(status, t);
+                Send(MessageTypes.PlanStatus, status);
+                if (AwaitingResume)
+                {
+                    _pauseReason = PauseReason.Plan;
+                    _repauseOnResume = _step.Mode == Modes.TurnBased;
+                }
+                else
+                {
+                    var reason = _step.OnPlanEnded();
+                    if (reason != PauseReason.None) Pause(reason);
+                }
+                return;
+            }
+            if (_executor == null)
+            {
+                SendError("This session has no plan executor");
+                return;
+            }
+            _repauseOnResume = false;
+            if (!_agentControl)
+            {
+                _agentControl = true;
+                _trace?.WriteControl("agent", t);
+            }
+            _trace?.WritePlan(env.Body["plan"] as JObject, t);
+            _executor.Load(plan);
         }
 
         void Pause(PauseReason reason)
@@ -163,7 +251,12 @@ namespace AgentPlay
 
         void AnnouncePause()
         {
-            Send(MessageTypes.Paused, new PausedMessage { Reason = _pauseReason.ToString().ToLowerInvariant(), T = _host.GameTime });
+            Send(MessageTypes.Paused, new PausedMessage
+            {
+                Reason = _pauseReason.ToString().ToLowerInvariant(),
+                T = _host.GameTime,
+                State = _snapshot(),
+            });
         }
 
         void SendError(string message) => Send(MessageTypes.Error, new ErrorMessage { Message = message });

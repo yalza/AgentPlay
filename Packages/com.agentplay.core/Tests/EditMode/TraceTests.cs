@@ -93,6 +93,25 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void WritesControlPlanAndPlanStatusLines()
+        {
+            var sw = new StringWriter();
+            using (var w = new TraceWriter(sw))
+            {
+                w.WriteControl("agent", 1.5);
+                w.WritePlan(new JObject { ["id"] = "p1" }, 1.5);
+                w.WritePlanStatus(new AgentPlay.Contract.PlanStatusMessage { PlanId = "p1", Status = "plan_done", Step = 2 }, 4.0);
+            }
+            var lines = Lines(sw);
+            Assert.AreEqual("control", (string)lines[0]["type"]);
+            Assert.AreEqual("agent", (string)lines[0]["who"]);
+            Assert.AreEqual("p1", (string)lines[1]["plan"]["id"]);
+            Assert.AreEqual("plan_status", (string)lines[2]["type"]);
+            Assert.AreEqual("plan_done", (string)lines[2]["status"]);
+            Assert.AreEqual(2, (int)lines[2]["step"]);
+        }
+
+        [Test]
         public void IntervalTimerFiresFirstTickThenEveryInterval()
         {
             var t = new IntervalTimer(2.0);
