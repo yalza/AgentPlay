@@ -2,7 +2,7 @@ namespace AgentPlay.Contract
 {
     public static class ProtocolVersion
     {
-        public const int Current = 2;
+        public const int Current = 3;
     }
 
     public static class MessageTypes
@@ -15,6 +15,8 @@ namespace AgentPlay.Contract
         public const string Error = "error";
         public const string PlanStatus = "plan_status";
         public const string Waiting = "waiting";
+        public const string Reflex = "reflex";
+        public const string ReflexEnd = "reflex_end";
         // Runner -> Unity
         public const string SetMode = "set_mode";
         public const string Resume = "resume";

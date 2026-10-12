@@ -48,6 +48,10 @@ namespace AgentPlay.Contract
         [JsonProperty("actions")] public List<ActionInfo> Actions = new List<ActionInfo>();
         [JsonProperty("events")] public List<EventInfo> Events = new List<EventInfo>();
         [JsonProperty("modes")] public List<string> Modes = new List<string>();
+        /// <summary>"play" (learn from this session) or "debug".</summary>
+        [JsonProperty("session_tag")] public string SessionTag = "debug";
+        /// <summary>Reflexes the game runs by itself in this session.</summary>
+        [JsonProperty("reflexes")] public List<ReflexInfo> Reflexes = new List<ReflexInfo>();
     }
 
     public sealed class EventMessage
@@ -103,6 +107,23 @@ namespace AgentPlay.Contract
         [JsonProperty("status")] public string Status;
         [JsonProperty("step")] public int Step;
         [JsonProperty("reason")] public string Reason;
+    }
+
+    public sealed class ReflexMessage
+    {
+        [JsonProperty("id")] public string Id;
+        [JsonProperty("t")] public double T;
+        [JsonProperty("frame")] public long Frame;
+        /// <summary>Important events of the frame the reflex fired in; the game did not pause for them.</summary>
+        [JsonProperty("handled_events")] public List<string> HandledEvents = new List<string>();
+    }
+
+    public sealed class ReflexEndMessage
+    {
+        [JsonProperty("id")] public string Id;
+        [JsonProperty("t")] public double T;
+        /// <summary>"done" or "failed:reason".</summary>
+        [JsonProperty("status")] public string Status;
     }
 
     public sealed class WaitingMessage

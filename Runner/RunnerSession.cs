@@ -185,6 +185,16 @@ namespace AgentPlay.Runner
                     if (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) _answeredPauseT = null;
                     break;
 
+                case MessageTypes.Reflex:
+                    var rx = env.As<ReflexMessage>();
+                    _print("reflex " + rx.Id + " t=" + Fmt(rx.T) + (rx.HandledEvents != null && rx.HandledEvents.Count > 0 ? " handled " + string.Join(",", rx.HandledEvents) : ""));
+                    break;
+
+                case MessageTypes.ReflexEnd:
+                    var rxe = env.As<ReflexEndMessage>();
+                    _print("reflex_end " + rxe.Id + " t=" + Fmt(rxe.T) + " " + rxe.Status);
+                    break;
+
                 case MessageTypes.Waiting:
                     _print("waiting");
                     break;

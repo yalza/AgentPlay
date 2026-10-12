@@ -58,7 +58,7 @@ namespace AgentPlay.Runner.Tests.Contract
 
             var back = MessageCodec.Decode(MessageCodec.Encode(MessageTypes.Hello, 1, hello)).As<HelloMessage>();
 
-            Assert.Equal(2, back.Protocol);
+            Assert.Equal(ProtocolVersion.Current, back.Protocol);
             Assert.Equal("Steal things", back.Brief);
             Assert.Equal("C:/Game", back.ProjectRoot);
             Assert.Equal("distance", back.Observes[0].Fields[0].Path);

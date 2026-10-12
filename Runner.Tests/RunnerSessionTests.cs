@@ -24,6 +24,18 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void ReflexMessagesArePrinted()
+        {
+            var s = Session();
+            var rx = new ReflexMessage { Id = "R-L1", T = 2, Frame = 9 };
+            rx.HandledEvents.Add("guard.spotted");
+            s.Handle(Env(MessageTypes.Reflex, rx));
+            s.Handle(Env(MessageTypes.ReflexEnd, new ReflexEndMessage { Id = "R-L1", T = 3, Status = "done" }));
+            Assert.Contains("reflex R-L1 t=2.00 handled guard.spotted", _printed);
+            Assert.Contains("reflex_end R-L1 t=3.00 done", _printed);
+        }
+
+        [Fact]
         public void HelloIsPrintedAndTriggersSetModeWhenRequested()
         {
             var s = Session("--mode", "turn_based");
