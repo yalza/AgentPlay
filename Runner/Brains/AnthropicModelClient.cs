@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Anthropic;
+using Anthropic.Exceptions;
 using Anthropic.Models.Beta.Messages;
 
 namespace AgentPlay.Runner.Brains
@@ -58,6 +59,15 @@ namespace AgentPlay.Runner.Brains
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (AnthropicRateLimitException e)
+            {
+                throw new ModelCallException("rate limited: " + e.Message, e);
+            }
+            catch (Anthropic4xxException e)
+            {
+                // Bad request, authentication, permission, not found: retrying cannot help.
+                throw new ModelCallException(e.GetType().Name + ": " + e.Message, e, retryable: false);
             }
             catch (Exception e)
             {

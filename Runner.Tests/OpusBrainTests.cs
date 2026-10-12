@@ -118,6 +118,20 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public async Task NonRetryableErrorStopsWithoutRetrying()
+        {
+            var client = new FakeClient();
+            client.Replies.Enqueue(_ => throw new ModelCallException("authentication_error: x-api-key header is required", null, retryable: false));
+            var ctx = Context();
+            var brain = Brain(client);
+            var plan = await brain.NextPlanAsync(ctx, CancellationToken.None);
+
+            Assert.Null(plan);
+            Assert.Equal(1, brain.Calls);
+            Assert.Equal("model call failed: authentication_error: x-api-key header is required", ctx.StopReason);
+        }
+
+        [Fact]
         public async Task CallBudgetStopsTheBrain()
         {
             var client = new FakeClient();

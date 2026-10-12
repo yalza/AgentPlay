@@ -31,10 +31,15 @@ namespace AgentPlay.Runner.Brains
         Task<ModelReply> CompleteAsync(ModelRequest request, CancellationToken ct);
     }
 
-    /// <summary>A failed model call that is worth retrying (network, overload, timeout).</summary>
+    /// <summary>A failed model call. Retryable ones (network, overload, rate limit, 5xx) are tried again; others stop the brain.</summary>
     public sealed class ModelCallException : Exception
     {
-        public ModelCallException(string message, Exception inner) : base(message, inner) { }
+        public bool Retryable { get; }
+
+        public ModelCallException(string message, Exception inner, bool retryable = true) : base(message, inner)
+        {
+            Retryable = retryable;
+        }
     }
 
     public sealed class CallRecord

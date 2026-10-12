@@ -130,6 +130,12 @@ namespace AgentPlay.Runner.Brains
                     CacheWriteTokens += reply.CacheWriteTokens;
                     return reply;
                 }
+                catch (ModelCallException e) when (!e.Retryable)
+                {
+                    context.StopReason = "model call failed: " + e.Message;
+                    _log(context.StopReason);
+                    return null;
+                }
                 catch (ModelCallException e)
                 {
                     int delay = RetryDelaysMs[Math.Min(attempt, RetryDelaysMs.Length - 1)];
