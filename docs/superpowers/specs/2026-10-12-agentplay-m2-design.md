@@ -99,7 +99,7 @@ Opus 5.5 tự chơi hai game Unity khác nhau ở chế độ theo lượt, qua 
   ],
   "rules": [
     { "when": "event:guard.spotted", "do": "hide", "args": { "zone": "cover_2" }, "then": "replan" },
-    { "when": "player.noise > 80", "do": "stop", "then": "resume" }
+    { "when": "any(guards.chasing)", "do": "goto", "args": { "zone": "exit" }, "then": "abort" }
   ],
   "timeout_s": 60
 }
