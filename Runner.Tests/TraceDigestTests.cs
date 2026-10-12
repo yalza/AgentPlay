@@ -116,5 +116,22 @@ namespace AgentPlay.Runner.Tests
             Assert.Null(d.Error);
             Assert.Contains("t=0.00 state", d.Text);
         }
+
+        [Fact]
+        public void OddFieldTypesDoNotThrow()
+        {
+            var lines = new[]
+            {
+                Header(),
+                "{\"type\":5,\"t\":1}",
+                "{\"type\":\"snapshot\",\"t\":\"soon\",\"state\":{\"x\":1}}",
+                "{\"type\":\"plan_status\",\"t\":2,\"plan_id\":\"p\",\"status\":\"plan_done\",\"step\":\"two\"}",
+                "{\"type\":\"reflex\",\"t\":3,\"id\":\"R\",\"handled_events\":\"oops\"}",
+                "[1,2,3]",
+            };
+            var d = TraceDigest.Build(lines, 10000);
+            Assert.Null(d.Error);
+            Assert.Contains("plan p plan_done", d.Text);
+        }
     }
 }

@@ -104,8 +104,16 @@ namespace AgentPlay.Runner.Learning
         public static HashSet<string> Load(string root)
         {
             string path = PathOf(root);
-            var names = File.Exists(path) ? JsonConvert.DeserializeObject<List<string>>(File.ReadAllText(path)) ?? new List<string>() : new List<string>();
-            return new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            if (!File.Exists(path)) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var names = JsonConvert.DeserializeObject<List<string>>(File.ReadAllText(path)) ?? new List<string>();
+                return new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            }
+            catch (JsonException e)
+            {
+                throw new InvalidDataException("Cannot read " + path + ": " + e.Message + ". Fix or delete the file.", e);
+            }
         }
 
         public static void Save(string root, HashSet<string> names) =>

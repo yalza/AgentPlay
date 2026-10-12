@@ -18,6 +18,8 @@ namespace AgentPlay.Runner.Learning
         public const int ExitOk = 0;
         public const int ExitBadInput = 2;
         public const int ExitModelFailed = 4;
+        /// <summary>Another reflect run is working on the same project.</summary>
+        public const int ExitBusy = 5;
         const int MaxAttempts = 3;
 
         public const string Instructions =
@@ -57,17 +59,31 @@ Return an empty lessons list if the session teaches nothing new.";
                 _log("reflect: no AgentPlay folder in " + projectRoot);
                 return ExitBadInput;
             }
+            using (var held = ReflectLock.TryAcquire(projectRoot))
+            {
+                if (held == null)
+                {
+                    _log("reflect: another reflect run is working on " + projectRoot + "; try again when it ends");
+                    return ExitBusy;
+                }
+                return await RunLockedAsync(projectRoot, agentPlay, traces, force, ct);
+            }
+        }
+
+        async Task<int> RunLockedAsync(string projectRoot, string agentPlay, IReadOnlyList<string> traces, bool force, CancellationToken ct)
+        {
             Playbook playbook;
+            HashSet<string> ledger;
             try
             {
                 playbook = PlaybookStore.Load(projectRoot);
+                ledger = ReflectedLedger.Load(projectRoot);
             }
             catch (InvalidDataException e)
             {
                 _log("reflect: " + e.Message);
                 return ExitBadInput;
             }
-            var ledger = ReflectedLedger.Load(projectRoot);
 
             int done = 0, proposals = 0;
             foreach (var path in Candidates(projectRoot, traces, force, ledger))

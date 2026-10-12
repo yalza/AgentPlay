@@ -71,7 +71,7 @@ namespace AgentPlay.Runner.Learning
                 {
                     continue;
                 }
-                string type = (string)o["type"];
+                string type = o["type"]?.Type == JTokenType.String ? (string)o["type"] : null;
                 if (header == null)
                 {
                     if (type != "header")
@@ -83,40 +83,13 @@ namespace AgentPlay.Runner.Learning
                     continue;
                 }
 
-                double t = o["t"] != null && o["t"].Type != JTokenType.Null ? (double)o["t"] : 0;
-                if (t > length) length = t;
-                string at = "t=" + t.ToString("0.00", CultureInfo.InvariantCulture) + " ";
-                switch (type)
+                try
                 {
-                    case "snapshot":
-                        AddState(items, at, o["state"] as JObject, previous);
-                        break;
-                    case "event":
-                        items.Add(new Item { Text = at + "event " + (string)o["name"] + " " + Rounded(o["payload"]).ToString(Formatting.None) });
-                        AddState(items, at, o["state"] as JObject, previous);
-                        break;
-                    case "control":
-                        if ((string)o["who"] == "agent")
-                        {
-                            result.AgentControlled = true;
-                            items.Add(new Item { Text = at + "agent takes control" });
-                        }
-                        break;
-                    case "plan":
-                        items.Add(new Item { Text = at + DescribePlan(o["plan"] as JObject) });
-                        break;
-                    case "plan_status":
-                        string reason = (string)o["reason"];
-                        items.Add(new Item { Text = at + "plan " + (string)o["plan_id"] + " " + (string)o["status"] + " step=" + (int?)o["step"]
-                            + (string.IsNullOrEmpty(reason) ? "" : " " + reason) });
-                        break;
-                    case "reflex":
-                        var handled = (o["handled_events"] as JArray)?.Select(x => (string)x).ToList() ?? new List<string>();
-                        items.Add(new Item { Text = at + "reflex " + (string)o["id"] + " fired" + (handled.Count > 0 ? " (handled " + string.Join(",", handled) + ")" : "") });
-                        break;
-                    case "reflex_end":
-                        items.Add(new Item { Text = at + "reflex " + (string)o["id"] + " " + (string)o["status"] });
-                        break;
+                    AddLine(o, type, items, previous, result, ref length);
+                }
+                catch (Exception e) when (e is FormatException || e is InvalidCastException || e is ArgumentException || e is OverflowException)
+                {
+                    // A line with odd field types is skipped; the rest of the trace still teaches something.
                 }
             }
 
@@ -138,6 +111,45 @@ namespace AgentPlay.Runner.Learning
                 + ". Session tag: " + result.Tag + ". Length: " + length.ToString("0.0", CultureInfo.InvariantCulture) + " game seconds.";
             result.Text = Fit(top, items, maxChars);
             return result;
+        }
+
+        static void AddLine(JObject o, string type, List<Item> items, Dictionary<string, string> previous, TraceDigestResult result, ref double length)
+        {
+            double t = o["t"] != null && o["t"].Type != JTokenType.Null ? (double)o["t"] : 0;
+            if (t > length) length = t;
+            string at = "t=" + t.ToString("0.00", CultureInfo.InvariantCulture) + " ";
+            switch (type)
+            {
+                case "snapshot":
+                    AddState(items, at, o["state"] as JObject, previous);
+                    break;
+                case "event":
+                    items.Add(new Item { Text = at + "event " + (string)o["name"] + " " + Rounded(o["payload"]).ToString(Formatting.None) });
+                    AddState(items, at, o["state"] as JObject, previous);
+                    break;
+                case "control":
+                    if ((string)o["who"] == "agent")
+                    {
+                        result.AgentControlled = true;
+                        items.Add(new Item { Text = at + "agent takes control" });
+                    }
+                    break;
+                case "plan":
+                    items.Add(new Item { Text = at + DescribePlan(o["plan"] as JObject) });
+                    break;
+                case "plan_status":
+                    string reason = (string)o["reason"];
+                    items.Add(new Item { Text = at + "plan " + (string)o["plan_id"] + " " + (string)o["status"] + " step=" + (o["step"]?.Type == JTokenType.Integer ? ((int)o["step"]).ToString(CultureInfo.InvariantCulture) : "?")
+                        + (string.IsNullOrEmpty(reason) ? "" : " " + reason) });
+                    break;
+                case "reflex":
+                    var handled = (o["handled_events"] as JArray)?.Select(x => (string)x).ToList() ?? new List<string>();
+                    items.Add(new Item { Text = at + "reflex " + (string)o["id"] + " fired" + (handled.Count > 0 ? " (handled " + string.Join(",", handled) + ")" : "") });
+                    break;
+                case "reflex_end":
+                    items.Add(new Item { Text = at + "reflex " + (string)o["id"] + " " + (string)o["status"] });
+                    break;
+            }
         }
 
         static void AddState(List<Item> items, string at, JObject state, Dictionary<string, string> previous)

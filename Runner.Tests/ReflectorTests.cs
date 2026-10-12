@@ -188,5 +188,31 @@ namespace AgentPlay.Runner.Tests
             Assert.Empty(client.Requests);
             Assert.Contains(PlayTrace, ReflectedLedger.Load(root));
         }
+
+        [Fact]
+        public async Task ConcurrentRunIsRefused()
+        {
+            var root = MakeProject();
+            var client = new FakeClient();
+            using (var held = ReflectLock.TryAcquire(root))
+            {
+                Assert.NotNull(held);
+                Assert.Equal(Reflector.ExitBusy, await Make(client).RunAsync(root, null, false, CancellationToken.None));
+            }
+            Assert.Empty(client.Requests);
+            Assert.Contains(_log, l => l.Contains("another reflect run"));
+            client.Replies.Enqueue(_ => Reply(Answer));
+            Assert.Equal(0, await Make(client).RunAsync(root, null, false, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task BadLedgerExitsTwo()
+        {
+            var root = MakeProject();
+            File.WriteAllText(Path.Combine(root, "AgentPlay", "reflected.json"), "{ not a list");
+            var client = new FakeClient();
+            Assert.Equal(2, await Make(client).RunAsync(root, null, false, CancellationToken.None));
+            Assert.Empty(client.Requests);
+        }
     }
 }
