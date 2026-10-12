@@ -3,5 +3,11 @@
   "model": "claude-opus-5-5",
   "effort": "high",
   "max_tokens": 16000,
-  "max_calls": 40
+  "max_calls": 40,
+  "reflector": {
+    "effort": "high",
+    "min_confirmations": 3,
+    "max_digest_chars": 60000,
+    "max_traces_per_run": 5
+  }
 }

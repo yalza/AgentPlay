@@ -40,7 +40,7 @@ namespace AgentPlay.Runner.Brains
         {
             "-p",
             "--model", config.Model,
-            "--effort", config.Effort,
+            "--effort", request.Effort ?? config.Effort,
             "--output-format", "json",
             "--json-schema", request.Schema.ToString(Formatting.None),
             "--system-prompt-file", systemPromptFile,
@@ -48,6 +48,10 @@ namespace AgentPlay.Runner.Brains
             "--strict-mcp-config",
             "--disable-slash-commands",
             "--no-session-persistence",
+            // No CLAUDE.md, skills, plugins or hooks of the user's setup: the game agent sees only its own prompt.
+            "--safe-mode",
+            // Only the (empty) working folder's settings: the user's language and other preferences stay out of game prompts.
+            "--setting-sources", "project",
         };
 
         public async Task<ModelReply> CompleteAsync(ModelRequest request, CancellationToken ct)

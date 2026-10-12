@@ -47,7 +47,7 @@ namespace AgentPlay.Runner.Brains
                 "id", "intent", "steps", "rules", "timeout_s");
         }
 
-        static JObject Args(ActionInfo action)
+        internal static JObject Args(ActionInfo action)
         {
             var properties = new JObject();
             var names = new JArray();
@@ -65,7 +65,7 @@ namespace AgentPlay.Runner.Brains
             };
         }
 
-        static JObject Closed(JObject properties, params string[] required) => new JObject
+        internal static JObject Closed(JObject properties, params string[] required) => new JObject
         {
             ["type"] = "object",
             ["properties"] = properties,

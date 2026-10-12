@@ -34,6 +34,19 @@ namespace AgentPlay.Runner
                 return 2;
             }
 
+            if (options.Command == "reflect")
+            {
+                var reflectConfig = LoadConfig(options);
+                if (reflectConfig == null) return 2;
+                return await new Reflector(MakeClient(reflectConfig), reflectConfig, Log).RunAsync(options.ProjectDir, options.Traces, options.Force, CancellationToken.None);
+            }
+            if (options.ReflectorSmoke)
+            {
+                var smokeConfig = LoadConfig(options);
+                if (smokeConfig == null) return 2;
+                return await ReflectorSmoke(MakeClient(smokeConfig), smokeConfig);
+            }
+
             IBrain brain = null;
             if (options.Brain == "script")
             {
@@ -55,32 +68,9 @@ namespace AgentPlay.Runner
             var telemetry = options.Brain != null ? new TelemetryRecorder() : null;
             if (options.Brain == "opus" || options.Smoke)
             {
-                var config = RunnerConfig.Load(Path.Combine(AppContext.BaseDirectory, "runner.json"));
-                if (options.Model != null) config.Model = options.Model;
-                if (options.Effort != null) config.Effort = options.Effort;
-                if (options.MaxCalls.HasValue) config.MaxCalls = options.MaxCalls.Value;
-                if (options.Backend != null) config.Backend = options.Backend;
-                try
-                {
-                    config.Validate();
-                }
-                catch (ArgumentException e)
-                {
-                    Console.Error.WriteLine(e.Message);
-                    return 2;
-                }
-                IModelClient client;
-                if (config.Backend == "api")
-                {
-                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
-                        Log("WARNING: ANTHROPIC_API_KEY is not set; the SDK will try other credentials (ant auth login profile)");
-                    client = new AnthropicModelClient(config);
-                }
-                else
-                {
-                    client = new ClaudeCodeModelClient(config);
-                }
-                opus = new OpusBrain(client, config.MaxCalls, Log);
+                var config = LoadConfig(options);
+                if (config == null) return 2;
+                opus = new OpusBrain(MakeClient(config), config.MaxCalls, Log);
                 opus.Called += (ctx, record) =>
                 {
                     telemetry?.OnCall(record);
@@ -189,7 +179,75 @@ namespace AgentPlay.Runner
                 Log("telemetry: " + telemetryPath + " (model calls " + report.ModelCalls + ", important events " + report.ImportantEvents
                     + ", handled by reflex " + report.HandledByReflex + ")");
             }
+            if (brain != null && !options.NoReflect && session.Hello?.SessionTag == "play" && session.Hello.ProjectRoot != null)
+            {
+                Log("session tag is play: learning from it");
+                var reflectConfig = LoadConfig(options);
+                if (reflectConfig != null)
+                    await new Reflector(MakeClient(reflectConfig), reflectConfig, Log).RunAsync(session.Hello.ProjectRoot, null, false, CancellationToken.None);
+            }
             return session.ExitCodeOnStop;
+        }
+
+        /// <summary>runner.json next to the runner plus command-line overrides; null (after printing why) when invalid.</summary>
+        static RunnerConfig LoadConfig(RunnerOptions options)
+        {
+            var config = RunnerConfig.Load(Path.Combine(AppContext.BaseDirectory, "runner.json"));
+            if (options.Model != null) config.Model = options.Model;
+            if (options.Effort != null) config.Effort = options.Effort;
+            if (options.MaxCalls.HasValue) config.MaxCalls = options.MaxCalls.Value;
+            if (options.Backend != null) config.Backend = options.Backend;
+            try
+            {
+                config.Validate();
+                return config;
+            }
+            catch (ArgumentException e)
+            {
+                Console.Error.WriteLine(e.Message);
+                return null;
+            }
+        }
+
+        static IModelClient MakeClient(RunnerConfig config)
+        {
+            if (config.Backend != "api") return new ClaudeCodeModelClient(config);
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
+                Log("WARNING: ANTHROPIC_API_KEY is not set; the SDK will try other credentials (ant auth login profile)");
+            return new AnthropicModelClient(config);
+        }
+
+        /// <summary>One reflector call against a made-up session, to check the schema with the real backend.</summary>
+        static async Task<int> ReflectorSmoke(IModelClient client, RunnerConfig config)
+        {
+            var hello = new HelloMessage { Protocol = ProtocolVersion.Current, Game = "Smoke test", Version = "1", SessionTag = "play", Brief = "Reach the exit without being seen by the guard." };
+            hello.Observes.Add(new ObserveInfo { Path = "player.hidden", ValueType = ValueKinds.Bool });
+            hello.Events.Add(new EventInfo { Name = "guard.spotted", Important = true, Outcome = "bad" });
+            hello.Actions.Add(new ActionInfo { Name = "hide_nearest", Description = "Crouch behind the nearest cover" });
+            hello.Actions.Add(new ActionInfo { Name = "goto", Params = new System.Collections.Generic.List<ActionParamInfo> { new ActionParamInfo { Name = "zone", ValueType = ValueKinds.String } } });
+            hello.Actions.Add(new ActionInfo { Name = "stop", Safe = true });
+            var request = new ModelRequest
+            {
+                System = Reflector.Instructions + "\n\n" + PromptBuilder.BuildGameSection(hello),
+                User = "# Current lessons\n(no lessons yet)\n\n# Session\nGame: Smoke test (version 1). Player: human. Session tag: play. Length: 9.0 game seconds.\n" +
+                       "t=0.00 state player.hidden=false\nt=3.00 event guard.spotted {}\nt=3.50 state player.hidden=true\nt=9.00 event game.won {}\n\nAnswer with the lessons this session supports or contradicts.",
+                Schema = ReflectorSchema.Build(hello),
+                Effort = config.Reflector.Effort,
+            };
+            try
+            {
+                var reply = await client.CompleteAsync(request, CancellationToken.None);
+                Log("reflector smoke: " + reply.LatencyMs + " ms; answer: " + reply.Text);
+                var output = ReflectorOutput.Parse(reply.Text);
+                var errors = output.Validate();
+                Log(errors.Count == 0 ? "reflector smoke ok: " + output.Lessons.Count + " lesson(s)" : "reflector smoke invalid: " + string.Join("; ", errors));
+                return errors.Count == 0 ? 0 : 1;
+            }
+            catch (Exception e) when (e is ModelCallException || e is Newtonsoft.Json.JsonException)
+            {
+                Log("reflector smoke failed: " + e.Message);
+                return 1;
+            }
         }
 
         /// <summary>One cheap model call against a made-up game, to check credentials and the request shape.</summary>

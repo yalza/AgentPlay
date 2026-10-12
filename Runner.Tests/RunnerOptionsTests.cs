@@ -48,5 +48,27 @@ namespace AgentPlay.Runner.Tests
         {
             Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(commandLine.Split(' ')));
         }
+
+        [Fact]
+        public void ReflectCommandParses()
+        {
+            var o = RunnerOptions.Parse(new[] { "reflect", "--project", "C:/g", "--trace", "a.ndjson", "--trace", "b.ndjson", "--force" });
+            Assert.Equal("reflect", o.Command);
+            Assert.Equal("C:/g", o.ProjectDir);
+            Assert.Equal(new[] { "a.ndjson", "b.ndjson" }, o.Traces);
+            Assert.True(o.Force);
+        }
+
+        [Fact]
+        public void ReflectNeedsProject() => Assert.Throws<System.ArgumentException>(() => RunnerOptions.Parse(new[] { "reflect" }));
+
+        [Fact]
+        public void ReflectRejectsPlayOptions() => Assert.Throws<System.ArgumentException>(() => RunnerOptions.Parse(new[] { "reflect", "--project", "C:/g", "--brain", "opus" }));
+
+        [Fact]
+        public void NoReflectFlag() => Assert.True(RunnerOptions.Parse(new[] { "--brain", "opus", "--no-reflect" }).NoReflect);
+
+        [Fact]
+        public void ReflectorSmokeFlag() => Assert.True(RunnerOptions.Parse(new[] { "--reflector-smoke" }).ReflectorSmoke);
     }
 }

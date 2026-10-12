@@ -42,7 +42,7 @@ namespace AgentPlay.Runner.Brains
                 Messages = [new() { Role = Role.User, Content = request.User }],
                 OutputConfig = new BetaOutputConfig
                 {
-                    Effort = ToEffort(_config.Effort),
+                    Effort = ToEffort(request.Effort ?? _config.Effort),
                     Format = new BetaJsonOutputFormat
                     {
                         Schema = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(request.Schema.ToString()),
