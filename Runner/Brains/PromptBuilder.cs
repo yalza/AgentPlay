@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using AgentPlay.Contract;
+using AgentPlay.Runner.Learning;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AgentPlay.Runner.Brains
 {
@@ -25,14 +28,42 @@ How a plan runs:
 - If an action fails, the plan fails and you are asked again with the reason.
 - timeout_s limits the plan in game seconds (at most 600). A plan has 1 to 12 steps and at most 8 rules.
 
-Conditions compare observe paths with numbers, true/false or 'single-quoted strings' using < <= > >= == !=, and combine with && || ! and parentheses. event:name is true in the frame that event happens. For list observes use min(list.field), max(list.field), count(list), count(list.boolfield) or any(list.boolfield); a list field cannot be used directly. A missing value makes a comparison false.
-
 Good plans are short (2 to 6 steps), use rules to react to danger, and use until conditions to wait for the right moment. Plans are cheap: when the situation is unclear, make a short plan and look again. The plan id can be any short string; the runner renumbers it.";
 
-        public static string BuildSystem(HelloMessage hello)
+        /// <summary>How conditions are written; part of the game section so the reflector sees it too.</summary>
+        public const string ConditionGrammar =
+@"Conditions compare observe paths with numbers, true/false or 'single-quoted strings' using < <= > >= == !=, and combine with && || ! and parentheses. event:name is true in the frame that event happens. For list observes use min(list.field), max(list.field), count(list), count(list.boolfield) or any(list.boolfield); a list field cannot be used directly. A missing value makes a comparison false.";
+
+        /// <summary>The cache-stable system prompt: instructions, the game, the playbook and the game's reflexes.</summary>
+        public static string BuildSystem(HelloMessage hello, Playbook playbook = null)
         {
             var sb = new StringBuilder();
-            sb.Append(Instructions).Append("\n\n");
+            sb.Append(Instructions).Append("\n\n").Append(BuildGameSection(hello));
+
+            sb.Append("\n## Playbook (lessons from earlier sessions of this game)\n");
+            var lessons = playbook == null ? new List<Lesson>() : PlaybookStore.ForPrompt(playbook);
+            if (lessons.Count == 0) sb.Append("(none yet)\n");
+            foreach (var l in lessons)
+                sb.Append("- [").Append(l.Id).Append(", confirmed ").Append(l.Confirmations).Append("x, contradicted ")
+                  .Append(l.Contradictions).Append("x] ").Append(l.Text).Append('\n');
+
+            sb.Append("\n## Reflexes the game runs by itself\n");
+            if (hello.Reflexes == null || hello.Reflexes.Count == 0) sb.Append("(none)\n");
+            else
+            {
+                foreach (var r in hello.Reflexes)
+                    sb.Append("- ").Append(r.Id).Append(": when ").Append(r.When).Append(" do ").Append(r.Do)
+                      .Append('(').Append(FormatArgs(r.Args)).Append(')')
+                      .Append(string.IsNullOrWhiteSpace(r.Text) ? "" : " \u2014 " + r.Text.Trim()).Append('\n');
+                sb.Append("When a reflex handles an important event the game does not pause, so your plan does not need a rule for it.\n");
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>The game: name, brief, observes, actions, events and the condition language.</summary>
+        public static string BuildGameSection(HelloMessage hello)
+        {
+            var sb = new StringBuilder();
             sb.Append("# Game: ").Append(hello.Game);
             if (!string.IsNullOrEmpty(hello.Version)) sb.Append(" (version ").Append(hello.Version).Append(')');
             sb.Append("\n\n").Append(string.IsNullOrWhiteSpace(hello.Brief) ? "(The game sent no description.)" : hello.Brief.Trim()).Append("\n\n");
@@ -67,8 +98,12 @@ Good plans are short (2 to 6 steps), use rules to react to danger, and use until
                     sb.Append('\n');
                 }
             sb.Append("\nImportant events pause the game and ask you again unless a rule of your plan reacts to them. game.won and game.lost end the round.\n");
+            sb.Append("\n## Conditions\n").Append(ConditionGrammar).Append('\n');
             return sb.ToString();
         }
+
+        static string FormatArgs(JObject args) =>
+            args == null || !args.HasValues ? "" : string.Join(", ", args.Properties().Select(p => p.Name + ": " + p.Value.ToString(Formatting.None)));
 
         public static string BuildTurn(BrainContext context)
         {

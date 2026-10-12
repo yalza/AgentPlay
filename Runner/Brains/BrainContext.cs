@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentPlay.Contract;
+using AgentPlay.Runner.Learning;
 using Newtonsoft.Json.Linq;
 
 namespace AgentPlay.Runner.Brains
@@ -10,6 +11,8 @@ namespace AgentPlay.Runner.Brains
     public sealed class BrainContext
     {
         public HelloMessage Hello;
+        /// <summary>Lessons of earlier sessions of this game; null when there is no playbook.</summary>
+        public Playbook Playbook;
         /// <summary>Snapshot carried by the paused message that asked for this decision.</summary>
         public JObject State;
         public string PauseReason;

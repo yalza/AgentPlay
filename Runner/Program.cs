@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentPlay.Contract;
 using AgentPlay.Runner.Brains;
+using AgentPlay.Runner.Learning;
 
 namespace AgentPlay.Runner
 {
@@ -99,7 +100,7 @@ namespace AgentPlay.Runner
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
             _ = Task.Run(() => ReadKeyboard(cts));
 
-            var session = new RunnerSession(options, Log, telemetry);
+            var session = new RunnerSession(options, Log, telemetry, LoadPlaybookSafe);
             var idle = Stopwatch.StartNew();
             bool everConnected = false;
             Log("runner started; looking for Unity on " + options.Host + ":" + options.FirstPort + "-" + options.LastPort);
@@ -213,6 +214,22 @@ namespace AgentPlay.Runner
             Log("smoke test plan: " + Newtonsoft.Json.JsonConvert.SerializeObject(plan));
             Log("smoke test tokens: in " + brain.InputTokens + ", out " + brain.OutputTokens);
             return 0;
+        }
+
+        static Playbook LoadPlaybookSafe(HelloMessage hello)
+        {
+            if (string.IsNullOrEmpty(hello.ProjectRoot)) return null;
+            try
+            {
+                var pb = PlaybookStore.Load(hello.ProjectRoot);
+                Log("playbook: " + pb.Lessons.Count + " lesson(s); reflexes active in game: " + hello.Reflexes.Count);
+                return pb;
+            }
+            catch (InvalidDataException e)
+            {
+                Log("WARNING: " + e.Message + " Playing without the playbook.");
+                return null;
+            }
         }
 
         static async Task Send(BridgeClient client, Outgoing msg, CancellationToken ct)

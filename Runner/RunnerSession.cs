@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using AgentPlay.Contract;
 using AgentPlay.Runner.Brains;
+using AgentPlay.Runner.Learning;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -30,6 +31,7 @@ namespace AgentPlay.Runner
         readonly Action<string> _print;
         readonly BrainContext _context = new BrainContext();
         readonly TelemetryRecorder _telemetry;
+        readonly Func<HelloMessage, Playbook> _loadPlaybook;
         /// <summary>Game time of the pause the last plan answered; a repeat announcement of it is ignored.</summary>
         double? _answeredPauseT;
 
@@ -45,8 +47,9 @@ namespace AgentPlay.Runner
 
         bool BrainMode => _options.Brain != null;
 
-        public RunnerSession(RunnerOptions options, Action<string> print, TelemetryRecorder telemetry = null)
+        public RunnerSession(RunnerOptions options, Action<string> print, TelemetryRecorder telemetry = null, Func<HelloMessage, Playbook> loadPlaybook = null)
         {
+            _loadPlaybook = loadPlaybook;
             _options = options;
             _print = print;
             _telemetry = telemetry;
@@ -122,6 +125,7 @@ namespace AgentPlay.Runner
                     HasHello = true;
                     _context.Hello = Hello;
                     _telemetry?.OnHello(Hello);
+                    _context.Playbook = _loadPlaybook?.Invoke(Hello);
                     PrintHello();
                     if (Hello.Protocol != ProtocolVersion.Current)
                     {

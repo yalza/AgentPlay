@@ -27,6 +27,37 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void SystemPromptListsPlaybookAndReflexes()
+        {
+            var hello = Hello();
+            hello.Reflexes.Add(new ReflexInfo { Id = "R-L2", When = "event:guard.spotted", Do = "hide_nearest", Args = new JObject(), Text = "Hide when spotted" });
+            var pb = new AgentPlay.Runner.Learning.Playbook();
+            pb.Lessons.Add(new AgentPlay.Runner.Learning.Lesson { Id = "L2", Text = "Hide when spotted", Confirmations = 4 });
+            string system = PromptBuilder.BuildSystem(hello, pb);
+            Assert.Contains("- [L2, confirmed 4x, contradicted 0x] Hide when spotted", system);
+            Assert.Contains("- R-L2: when event:guard.spotted do hide_nearest() — Hide when spotted", system);
+            Assert.Contains("the game does not pause", system);
+            Assert.Equal(system, PromptBuilder.BuildSystem(hello, pb));
+        }
+
+        [Fact]
+        public void SystemPromptWithoutLearningSaysNone()
+        {
+            string system = PromptBuilder.BuildSystem(Hello());
+            Assert.Contains("## Playbook", system);
+            Assert.Contains("(none yet)", system);
+            Assert.Contains("## Reflexes the game runs by itself\n(none)", system);
+        }
+
+        [Fact]
+        public void GameSectionCarriesTheConditionGrammar()
+        {
+            string game = PromptBuilder.BuildGameSection(Hello());
+            Assert.Contains("# Game: Demo", game);
+            Assert.Contains("event:name is true in the frame that event happens", game);
+        }
+
+        [Fact]
         public void SystemDescribesTheGameAndTheDsl()
         {
             var s = PromptBuilder.BuildSystem(Hello());
