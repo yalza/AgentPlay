@@ -7,8 +7,8 @@ namespace AgentPlay.Runner
     public sealed class RunnerOptions
     {
         public const string Usage =
-            "Usage: AgentPlay.Runner [--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] " +
-            "[--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
+            "Usage: AgentPlay.Runner [--brain script <file>] [--mode turn_based|realtime] [--auto-resume] " +
+            "[--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
 
         public string Host = "127.0.0.1";
         public int FirstPort = 47800;
@@ -18,6 +18,9 @@ namespace AgentPlay.Runner
         public double ResumeSeconds = 3;
         public int ThinkMs;
         public double IdleExitSeconds;
+        /// <summary>null keeps the M1 behaviour (print and optionally auto-resume); "script" plays plans from a file.</summary>
+        public string Brain;
+        public string ScriptPath;
 
         public static RunnerOptions Parse(string[] args)
         {
@@ -27,6 +30,22 @@ namespace AgentPlay.Runner
                 string a = args[i];
                 switch (a)
                 {
+                    case "--brain":
+                        var brain = Value(args, ref i, a);
+                        if (brain == "script")
+                        {
+                            o.Brain = brain;
+                            o.ScriptPath = Value(args, ref i, "--brain script");
+                        }
+                        else if (brain == "opus" || brain == "manual")
+                        {
+                            throw new ArgumentException("--brain " + brain + " is not available yet (arrives in M2b)");
+                        }
+                        else
+                        {
+                            throw new ArgumentException("Unknown brain: " + brain);
+                        }
+                        break;
                     case "--mode":
                         o.Mode = Value(args, ref i, a);
                         if (!Modes.IsKnown(o.Mode)) throw new ArgumentException("Unknown mode: " + o.Mode);
@@ -53,6 +72,12 @@ namespace AgentPlay.Runner
                     default:
                         throw new ArgumentException("Unknown argument: " + a);
                 }
+            }
+            if (o.Brain != null)
+            {
+                if (o.Mode == Modes.Realtime) throw new ArgumentException("--brain plays in turn_based mode only");
+                if (o.AutoResume) throw new ArgumentException("--brain decides when to resume; drop --auto-resume");
+                o.Mode = Modes.TurnBased;
             }
             return o;
         }
