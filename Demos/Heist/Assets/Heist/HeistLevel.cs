@@ -49,6 +49,24 @@ namespace HeistDemo
             return best;
         }
 
+        /// <summary>The cover_* zone closest to <paramref name="position"/> on the floor plane.</summary>
+        public static string NearestCover(Vector3 position)
+        {
+            string best = null;
+            float bestDistance = float.MaxValue;
+            foreach (var zone in Zones)
+            {
+                if (!zone.Key.StartsWith("cover_")) continue;
+                float d = FlatDistance(position, zone.Value);
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    best = zone.Key;
+                }
+            }
+            return best;
+        }
+
         public static float FlatDistance(Vector3 a, Vector3 b)
         {
             a.y = 0f;
