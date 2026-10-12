@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using AgentPlay.Contract;
@@ -17,9 +18,10 @@ namespace AgentPlay
             _out = output;
         }
 
-        public void WriteHeader(string game, string version, string who, string tag, DateTime startedUtc)
+        /// <summary>The header; <paramref name="hello"/> (all observes, actions and events) lets the reflector read the trace later.</summary>
+        public void WriteHeader(string game, string version, string who, string tag, DateTime startedUtc, HelloMessage hello = null)
         {
-            WriteLine(new JObject
+            var header = new JObject
             {
                 ["type"] = "header",
                 ["game"] = game,
@@ -27,7 +29,9 @@ namespace AgentPlay
                 ["who"] = who,
                 ["tag"] = tag,
                 ["started"] = startedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
-            });
+            };
+            if (hello != null) header["hello"] = JObject.FromObject(hello, ContractJson.Serializer);
+            WriteLine(header);
         }
 
         public void WriteEvent(AgentEventRecord e, JObject state)
@@ -78,6 +82,19 @@ namespace AgentPlay
                 ["step"] = status.Step,
                 ["reason"] = status.Reason,
             });
+        }
+
+        public void WriteReflex(string id, double t, IReadOnlyList<string> handled)
+        {
+            var events = new JArray();
+            if (handled != null)
+                foreach (var name in handled) events.Add(name);
+            WriteLine(new JObject { ["type"] = "reflex", ["t"] = t, ["id"] = id, ["handled_events"] = events });
+        }
+
+        public void WriteReflexEnd(string id, double t, string status)
+        {
+            WriteLine(new JObject { ["type"] = "reflex_end", ["t"] = t, ["id"] = id, ["status"] = status });
         }
 
         void WriteLine(JObject o)

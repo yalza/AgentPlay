@@ -68,6 +68,37 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void ImportantEventHandledByReflexDoesNotPause()
+        {
+            TurnBasedRunning();
+            var outputs = new[] { new ExecutorOutput { Kind = ExecutorOutputKinds.ReflexFired, ReflexId = "R1", PlanId = "p" } };
+            _core.OnFrameEnd(outputs, true, new List<string> { "guard.spotted" });
+            Assert.IsFalse(_host.Paused);
+            var reflex = _host.OfType(MessageTypes.Reflex).Single().As<ReflexMessage>();
+            Assert.AreEqual("R1", reflex.Id);
+            CollectionAssert.AreEqual(new[] { "guard.spotted" }, reflex.HandledEvents);
+            StringAssert.Contains("\"type\":\"reflex\"", _trace.ToString());
+        }
+
+        [Test]
+        public void ReflexEndIsSentAndTraced()
+        {
+            TurnBasedRunning();
+            _core.OnFrameEnd(new[] { new ExecutorOutput { Kind = ExecutorOutputKinds.ReflexEnded, ReflexId = "R1", Reason = "done" } }, false);
+            var end = _host.OfType(MessageTypes.ReflexEnd).Single().As<ReflexEndMessage>();
+            Assert.AreEqual("done", end.Status);
+            StringAssert.Contains("\"type\":\"reflex_end\"", _trace.ToString());
+        }
+
+        [Test]
+        public void ImportantEventWithoutReflexStillPauses()
+        {
+            TurnBasedRunning();
+            _core.OnFrameEnd(new ExecutorOutput[0], true, new List<string> { "guard.spotted" });
+            Assert.IsTrue(_host.Paused);
+        }
+
+        [Test]
         public void ValidPlanIsLoadedAndTracedWithControl()
         {
             _core.OnLine(PlanLine(ValidPlan));
