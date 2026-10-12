@@ -36,6 +36,9 @@ namespace AgentPlay.Tests
         static string Line(string type, object body) => MessageCodec.Encode(type, 1, body);
         static AgentEventRecord Ev(string name, bool important) => new AgentEventRecord(name, null, important, AgentOutcome.Neutral, 0, 0);
 
+        void Frame() => _core.OnFrameEnd(new ExecutorOutput[0], false);
+        void ImportantFrame() => _core.OnFrameEnd(new ExecutorOutput[0], true);
+
         [Test]
         public void SendsHelloOnConnect()
         {
@@ -83,6 +86,7 @@ namespace AgentPlay.Tests
         public void ImportantEventPausesOnlyInTurnBasedAndAfterSendingTheEvent()
         {
             _core.OnEvent(Ev("e1", true));
+            ImportantFrame();
             Assert.IsFalse(_host.Paused, "realtime never pauses");
 
             _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
@@ -90,24 +94,26 @@ namespace AgentPlay.Tests
             _host.Sent.Clear();
 
             _core.OnEvent(Ev("minor", false));
+            Frame();
             Assert.IsFalse(_host.Paused);
             _core.OnEvent(Ev("e2", true));
+            ImportantFrame();
             Assert.IsTrue(_host.Paused);
             CollectionAssert.AreEqual(new[] { MessageTypes.Event, MessageTypes.Event, MessageTypes.Paused },
                 _host.Sent.Select(e => e.Type).ToArray());
             Assert.AreEqual("event", _host.Sent[2].As<PausedMessage>().Reason);
         }
-
         [Test]
         public void SecondImportantEventWhileWaitingDoesNotSendAnotherPaused()
         {
             _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
             _core.OnEvent(Ev("a", true));
+            ImportantFrame();
             _core.OnEvent(Ev("b", true));
+            ImportantFrame();
             Assert.AreEqual(1, _host.OfType(MessageTypes.Paused).Count);
             Assert.IsTrue(_core.AwaitingResume);
         }
-
         [Test]
         public void ManualUnpauseClearsWaitingSoNextEventPausesAgain()
         {
@@ -116,10 +122,10 @@ namespace AgentPlay.Tests
             _core.Tick(true);
             Assert.IsFalse(_core.AwaitingResume);
             _core.OnEvent(Ev("a", true));
+            ImportantFrame();
             Assert.IsTrue(_host.Paused);
             Assert.AreEqual(2, _host.OfType(MessageTypes.Paused).Count);
         }
-
         [Test]
         public void ReconnectWhileWaitingAnnouncesThePauseAgain()
         {
@@ -135,8 +141,20 @@ namespace AgentPlay.Tests
         {
             _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
             _core.OnEvent(Ev("a", true));
+            ImportantFrame();
             _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
             Assert.AreEqual(2, _host.OfType(MessageTypes.Paused).Count);
+            Assert.IsTrue(_host.Paused);
+        }
+        [Test]
+        public void ImportanceComesFromTheFrameTheExecutorEvaluated()
+        {
+            _core.OnLine(Line(MessageTypes.SetMode, new SetModeMessage { Mode = Modes.TurnBased }));
+            _core.OnLine(Line(MessageTypes.Resume, new ResumeMessage { MaxGameSeconds = 0 }));
+            _core.OnEvent(Ev("emitted.during.tick", true));
+            Frame();
+            Assert.IsFalse(_host.Paused, "an event raised during the tick belongs to the next frame");
+            ImportantFrame();
             Assert.IsTrue(_host.Paused);
         }
 

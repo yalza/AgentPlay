@@ -13,3 +13,13 @@ Testbed/*.csproj
 Testbed/*.sln
 .vs/
 .idea/
+# Demo Unity projects
+/Demos/*/[Ll]ibrary/
+/Demos/*/[Tt]emp/
+/Demos/*/[Ll]ogs/
+/Demos/*/[Oo]bj/
+/Demos/*/[Uu]ser[Ss]ettings/
+/Demos/*/*.csproj
+/Demos/*/*.sln
+/Demos/*/AgentPlay/Traces/
+/Demos/*/AgentPlay/Runs/

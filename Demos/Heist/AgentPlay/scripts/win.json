@@ -1,0 +1,53 @@
+{
+  "plans": [
+    {
+      "id": "s1",
+      "intent": "Take item_a, which the guard cannot see, then hide behind cover_1",
+      "steps": [
+        { "do": "goto", "args": { "zone": "item_a" } },
+        { "do": "pick", "args": { "item": "item_a" } },
+        { "do": "hide", "args": { "zone": "cover_1" } }
+      ],
+      "rules": [
+        { "when": "event:guard.spotted", "do": "hide", "args": { "zone": "cover_1" }, "then": "replan" }
+      ],
+      "timeout_s": 30
+    },
+    {
+      "id": "s2",
+      "intent": "Wait until the guard walks south past the middle, then grab item_b and hide",
+      "steps": [
+        { "do": "wait", "args": { "seconds": 30 }, "until": "!any(guards.moving_north) && max(guards.z) < 1 && max(guards.z) > -1" },
+        { "do": "goto", "args": { "zone": "item_b" } },
+        { "do": "pick", "args": { "item": "item_b" } },
+        { "do": "hide", "args": { "zone": "cover_1" } }
+      ],
+      "rules": [
+        { "when": "event:guard.spotted", "do": "hide", "args": { "zone": "cover_1" }, "then": "replan" }
+      ],
+      "timeout_s": 60
+    },
+    {
+      "id": "s3",
+      "intent": "Wait until the guard walks north past the middle, then grab item_c and hide",
+      "steps": [
+        { "do": "wait", "args": { "seconds": 30 }, "until": "any(guards.moving_north) && min(guards.z) > -1 && min(guards.z) < 1" },
+        { "do": "goto", "args": { "zone": "item_c" } },
+        { "do": "pick", "args": { "item": "item_c" } },
+        { "do": "hide", "args": { "zone": "cover_1" } }
+      ],
+      "rules": [
+        { "when": "event:guard.spotted", "do": "hide", "args": { "zone": "cover_1" }, "then": "replan" }
+      ],
+      "timeout_s": 60
+    },
+    {
+      "id": "s4",
+      "intent": "Leave through the exit with all three items",
+      "steps": [
+        { "do": "goto", "args": { "zone": "exit" } }
+      ],
+      "timeout_s": 30
+    }
+  ]
+}

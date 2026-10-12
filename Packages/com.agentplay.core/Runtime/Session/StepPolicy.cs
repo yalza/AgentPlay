@@ -2,7 +2,7 @@ using AgentPlay.Contract;
 
 namespace AgentPlay
 {
-    public enum PauseReason { None, Mode, Event, Budget }
+    public enum PauseReason { None, Mode, Event, Budget, Plan }
 
     /// <summary>Decides when turn-based play must stop and wait for the runner.</summary>
     public sealed class StepPolicy
@@ -19,12 +19,10 @@ namespace AgentPlay
             return true;
         }
 
-        public PauseReason OnImportantEvent()
-        {
-            if (Mode != Modes.TurnBased) return PauseReason.None;
-            _budgetEnd = double.PositiveInfinity;
-            return PauseReason.Event;
-        }
+        public PauseReason OnImportantEvent() => Stop(PauseReason.Event);
+
+        /// <summary>A plan finished or failed (including a rejected plan).</summary>
+        public PauseReason OnPlanEnded() => Stop(PauseReason.Plan);
 
         public PauseReason OnTick(double gameTime)
         {
@@ -36,6 +34,13 @@ namespace AgentPlay
         public void OnResume(double gameTime, double maxGameSeconds)
         {
             _budgetEnd = maxGameSeconds > 0 ? gameTime + maxGameSeconds : double.PositiveInfinity;
+        }
+
+        PauseReason Stop(PauseReason reason)
+        {
+            if (Mode != Modes.TurnBased) return PauseReason.None;
+            _budgetEnd = double.PositiveInfinity;
+            return reason;
         }
     }
 }
