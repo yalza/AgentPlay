@@ -1,7 +1,7 @@
 # AgentPlay M3: Học từ phiên chơi, playbook và phản xạ
 
 **Ngày:** 2026-10-13
-**Trạng thái:** Người dùng đã duyệt hướng thiết kế và cho phép đi một mạch từ spec, plan đến thực thi
+**Trạng thái:** Đã triển khai và kiểm chứng (`docs/notes/m3-verification.md`)
 **Spec gốc:** `docs/superpowers/specs/2026-10-11-agentplay-design.md` (mục 1, 5, 6, 8, 11, 12). M3 kế thừa M1 và M2 đã merge (`docs/notes/m2b-verification.md`, `docs/notes/m2c-verification.md`).
 
 ---
