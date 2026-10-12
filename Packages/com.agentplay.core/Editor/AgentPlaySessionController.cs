@@ -23,6 +23,7 @@ namespace AgentPlay.Editor
         static TraceWriter _trace;
         static RegistryModel _model;
         static UnityInstanceResolver _resolver;
+        static AgentExecutorHost _executorHost;
         static bool _previousRunInBackground;
         static readonly HashSet<string> Warned = new HashSet<string>();
         static readonly UnityHost Host = new UnityHost();
@@ -69,11 +70,15 @@ namespace AgentPlay.Editor
             TracePath = TracePaths.Build(projectRoot, DateTime.Now, Who, tag, File.Exists);
             _trace = TracePaths.Open(TracePath);
             var hello = AgentRegistry.ToHello(_model, Application.productName);
+            hello.ProjectRoot = projectRoot;
+            hello.Brief = ReadBrief(projectRoot);
             _trace.WriteHeader(hello.Game, hello.Version, Who, tag, DateTime.UtcNow);
 
             _server = new BridgeServer();
             Host.Server = _server;
-            _core = new SessionCore(hello, Snapshot, Host, _trace, SnapshotIntervalSeconds);
+            var executor = new ExecutorCore(new ActionInvoker(_model, _resolver.Resolve), _model.SafeAction);
+            _executorHost = AgentExecutorHost.Create(executor, Snapshot, outputs => _core?.OnFrameEnd(outputs));
+            _core = new SessionCore(hello, Snapshot, Host, _trace, SnapshotIntervalSeconds, _executorHost);
 
             if (_server.Start())
                 Debug.Log("[AgentPlay] Bridge listening on 127.0.0.1:" + _server.Port);
@@ -94,6 +99,8 @@ namespace AgentPlay.Editor
         {
             if (!IsActive) return;
             AgentEvents.Emitted -= OnEvent;
+            _executorHost?.Shutdown();
+            _executorHost = null;
             Application.runInBackground = _previousRunInBackground;
             _server?.Dispose();
             _trace?.Dispose();
@@ -115,6 +122,14 @@ namespace AgentPlay.Editor
         }
 
         static void OnEvent(AgentEventRecord record) => _core?.OnEvent(record);
+
+        static string ReadBrief(string projectRoot)
+        {
+            string path = Path.Combine(projectRoot, "AgentPlay", "brief.md");
+            if (File.Exists(path)) return File.ReadAllText(path);
+            Debug.Log("[AgentPlay] No AgentPlay/brief.md in " + projectRoot + "; the agent gets no game description");
+            return "";
+        }
 
         static JObject Snapshot()
         {
