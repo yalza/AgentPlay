@@ -29,7 +29,7 @@ namespace AgentPlay.Runner.Tests.Contract
 
             var back = MessageCodec.Decode(MessageCodec.Encode(MessageTypes.Hello, 1, hello)).As<HelloMessage>();
 
-            Assert.Equal(1, back.Protocol);
+            Assert.Equal(ProtocolVersion.Current, back.Protocol);
             Assert.Equal("G", back.Game);
             Assert.Equal("noise.value", back.Observes[0].Path);
             Assert.Equal("float", back.Observes[0].ValueType);

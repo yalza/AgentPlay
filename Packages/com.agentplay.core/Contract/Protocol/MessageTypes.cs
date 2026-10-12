@@ -2,7 +2,7 @@ namespace AgentPlay.Contract
 {
     public static class ProtocolVersion
     {
-        public const int Current = 1;
+        public const int Current = 2;
     }
 
     public static class MessageTypes
@@ -13,10 +13,14 @@ namespace AgentPlay.Contract
         public const string Event = "event";
         public const string Paused = "paused";
         public const string Error = "error";
+        public const string PlanStatus = "plan_status";
+        public const string Waiting = "waiting";
         // Runner -> Unity
         public const string SetMode = "set_mode";
         public const string Resume = "resume";
         public const string GetState = "get_state";
+        public const string Plan = "plan";
+        public const string StopPlan = "stop_plan";
     }
 
     public static class Modes
@@ -35,5 +39,21 @@ namespace AgentPlay.Contract
         public const string String = "string";
         public const string Enum = "enum";
         public const string Vector3 = "vector3";
+        public const string List = "list";
+    }
+
+    public static class PlanStatuses
+    {
+        public const string StepDone = "step_done";
+        public const string PlanDone = "plan_done";
+        public const string PlanFailed = "plan_failed";
+        public const string RuleFired = "rule_fired";
+    }
+
+    /// <summary>Event names every game uses to end a round; the runner stops asking the model after either.</summary>
+    public static class ReservedEvents
+    {
+        public const string GameWon = "game.won";
+        public const string GameLost = "game.lost";
     }
 }
