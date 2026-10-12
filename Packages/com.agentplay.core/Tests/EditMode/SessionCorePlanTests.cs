@@ -26,6 +26,8 @@ namespace AgentPlay.Tests
             public int Stops;
             public void Load(Plan plan) => Loaded.Add(plan);
             public void Stop() => Stops++;
+            public void SetReflexes(IReadOnlyList<Reflex> reflexes) { }
+            public void RemoveReflex(string id) { }
         }
 
         FakeHost _host;

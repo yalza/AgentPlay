@@ -13,14 +13,22 @@ namespace AgentPlay
         /// <summary>Step index, or rule index for rule_fired.</summary>
         public int Step;
         public string Reason;
+        /// <summary>Set for reflex_fired and reflex_ended.</summary>
+        public string ReflexId;
     }
 
     public static class ExecutorOutputKinds
     {
         public const string Waiting = "waiting";
+        public const string ReflexFired = "reflex_fired";
+        /// <summary>Reason is "done" or "failed:why".</summary>
+        public const string ReflexEnded = "reflex_ended";
     }
 
-    /// <summary>Runs one plan frame by frame (spec M2 section 5). Pure: no Unity calls, main thread only.</summary>
+    /// <summary>
+    /// Runs one plan frame by frame (spec M2 section 5) under a layer of reflexes (spec M3 section 3.3):
+    /// reflex, then plan rule, then step. Pure: no Unity calls, main thread only.
+    /// </summary>
     public sealed class ExecutorCore
     {
         static readonly IReadOnlyList<ExecutorOutput> None = new ExecutorOutput[0];
@@ -30,6 +38,18 @@ namespace AgentPlay
         readonly AgentActionContext _stepContext = new AgentActionContext();
         readonly AgentActionContext _ruleContext = new AgentActionContext();
         readonly AgentActionContext _safeContext = new AgentActionContext();
+        readonly AgentActionContext _reflexContext = new AgentActionContext();
+        readonly List<ReflexSlot> _reflexes = new List<ReflexSlot>();
+
+        sealed class ReflexSlot
+        {
+            public Reflex Reflex;
+            public CondNode When;
+            public bool WasTrue;
+            public bool Pending;
+            /// <summary>Executor time from which a rising edge may fire the reflex again.</summary>
+            public double ReadyAt;
+        }
 
         Plan _plan;
         CondNode[] _until;
@@ -39,6 +59,8 @@ namespace AgentPlay
         int _step;
         int _activeRule = -1;
         double _planTime;
+        ReflexSlot _activeReflex;
+        double _time;
 
         public ExecutorCore(IActionRunner actions, string safeAction)
         {
@@ -48,8 +70,29 @@ namespace AgentPlay
 
         public string PlanId => _plan?.Id;
 
-        /// <summary>True once any plan has been loaded; before that the safe action does not run.</summary>
+        /// <summary>True once any plan has been loaded; before that neither the safe action nor reflexes run.</summary>
         public bool ControlTaken { get; private set; }
+
+        public bool ReflexRunning => _activeReflex != null;
+
+        /// <summary>Replaces the reflexes. Each must already be validated; conditions are parsed here once.</summary>
+        public void SetReflexes(IReadOnlyList<Reflex> reflexes)
+        {
+            _reflexes.Clear();
+            _activeReflex = null;
+            if (reflexes == null) return;
+            foreach (var r in reflexes) _reflexes.Add(new ReflexSlot { Reflex = r, When = ConditionParser.Parse(r.When) });
+        }
+
+        public void RemoveReflex(string id)
+        {
+            for (int i = _reflexes.Count - 1; i >= 0; i--)
+            {
+                if (_reflexes[i].Reflex.Id != id) continue;
+                if (_activeReflex == _reflexes[i]) _activeReflex = null;
+                _reflexes.RemoveAt(i);
+            }
+        }
 
         /// <summary>Loads a validated plan, replacing the current one.</summary>
         public void Load(Plan plan)
@@ -81,13 +124,39 @@ namespace AgentPlay
 
         public IReadOnlyList<ExecutorOutput> Tick(double deltaTime, Func<JObject> snapshot, ICollection<string> events)
         {
-            if (_plan == null)
+            _time += deltaTime;
+            bool reflexes = ControlTaken && _reflexes.Count > 0;
+            if (_plan == null && !reflexes)
             {
                 RunSafe(deltaTime);
                 return None;
             }
 
             var outputs = new List<ExecutorOutput>();
+            var context = new SnapshotContext(snapshot(), events);
+            if (reflexes)
+            {
+                UpdateReflexEdges(context);
+                if (_activeReflex == null) StartPendingReflex(outputs);
+            }
+
+            if (_activeReflex != null)
+            {
+                // Rules and until conditions wait; the plan's clock keeps running.
+                if (_plan != null)
+                {
+                    _planTime += deltaTime;
+                    if (_planTime > _plan.TimeoutSeconds) End(outputs, PlanStatuses.PlanFailed, "timeout");
+                }
+                RunReflex(deltaTime, outputs);
+                return outputs;
+            }
+
+            if (_plan == null)
+            {
+                RunSafe(deltaTime);
+                return outputs;
+            }
             _planTime += deltaTime;
             if (_planTime > _plan.TimeoutSeconds)
             {
@@ -95,7 +164,6 @@ namespace AgentPlay
                 return outputs;
             }
 
-            var context = new SnapshotContext(snapshot(), events);
             // A rule whose condition rose stays pending until it gets to fire, so one outranked in the
             // same frame (or rising while it already runs) is not lost.
             int fire = -1;
@@ -117,6 +185,49 @@ namespace AgentPlay
             if (_activeRule >= 0) RunRule(deltaTime, outputs);
             else RunStep(deltaTime, context, outputs);
             return outputs;
+        }
+
+        void UpdateReflexEdges(SnapshotContext context)
+        {
+            foreach (var slot in _reflexes)
+            {
+                bool now = ConditionEvaluator.Evaluate(slot.When, context);
+                // An edge inside the cooldown is ignored, not queued.
+                if (now && !slot.WasTrue && _time >= slot.ReadyAt) slot.Pending = true;
+                slot.WasTrue = now;
+            }
+        }
+
+        void StartPendingReflex(List<ExecutorOutput> outputs)
+        {
+            foreach (var slot in _reflexes)
+            {
+                if (!slot.Pending) continue;
+                slot.Pending = false;
+                _activeReflex = slot;
+                Reset(_reflexContext);
+                outputs.Add(new ExecutorOutput { Kind = ExecutorOutputKinds.ReflexFired, PlanId = _plan?.Id, ReflexId = slot.Reflex.Id });
+                return;
+            }
+        }
+
+        void RunReflex(double deltaTime, List<ExecutorOutput> outputs)
+        {
+            var slot = _activeReflex;
+            string result = null;
+            if (!TryRun(slot.Reflex.Do, slot.Reflex.Args, _reflexContext, deltaTime, out var status, out var error)) result = "failed:" + error;
+            else if (status == AgentActionStatus.Failed) result = "failed:action_failed:" + slot.Reflex.Do;
+            else if (status == AgentActionStatus.Done) result = "done";
+            else if (_reflexContext.Elapsed > ReflexLimits.MaxRunSeconds) result = "failed:timeout";
+            if (result == null) return;
+
+            _activeReflex = null;
+            slot.ReadyAt = _time + slot.Reflex.CooldownSeconds;
+            outputs.Add(new ExecutorOutput { Kind = ExecutorOutputKinds.ReflexEnded, PlanId = _plan?.Id, ReflexId = slot.Reflex.Id, Reason = result });
+            // Whatever the reflex interrupted starts its action again.
+            Reset(_stepContext);
+            Reset(_ruleContext);
+            Reset(_safeContext);
         }
 
         void RunRule(double deltaTime, List<ExecutorOutput> outputs)

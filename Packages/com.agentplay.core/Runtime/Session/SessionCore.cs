@@ -103,7 +103,7 @@ namespace AgentPlay
         /// Called once per game frame after the executor ran; decides turn-based stops (spec M2 section 7).
         /// <paramref name="importantEvent"/> is true when the events the executor evaluated this frame included an important one.
         /// </summary>
-        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs, bool importantEvent)
+        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs, bool importantEvent, IReadOnlyList<string> importantEvents = null)
         {
             bool ended = false;
             bool ruleFired = false;

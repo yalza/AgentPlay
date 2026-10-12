@@ -77,7 +77,7 @@ namespace AgentPlay.Editor
             _server = new BridgeServer();
             Host.Server = _server;
             var executor = new ExecutorCore(new ActionInvoker(_model, _resolver.Resolve), _model.SafeAction);
-            _executorHost = AgentExecutorHost.Create(executor, Snapshot, (outputs, important) => _core?.OnFrameEnd(outputs, important));
+            _executorHost = AgentExecutorHost.Create(executor, Snapshot, (outputs, important, names) => _core?.OnFrameEnd(outputs, important, names));
             _core = new SessionCore(hello, Snapshot, Host, _trace, SnapshotIntervalSeconds, _executorHost);
 
             if (_server.Start())
