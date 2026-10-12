@@ -48,6 +48,40 @@ namespace AgentPlay.Runner
                 }
             }
 
+            OpusBrain opus = null;
+            RunLog runLog = null;
+            if (options.Brain == "opus" || options.Smoke)
+            {
+                var config = RunnerConfig.Load(Path.Combine(AppContext.BaseDirectory, "runner.json"));
+                if (options.Model != null) config.Model = options.Model;
+                if (options.Effort != null) config.Effort = options.Effort;
+                if (options.MaxCalls.HasValue) config.MaxCalls = options.MaxCalls.Value;
+                try
+                {
+                    config.Validate();
+                }
+                catch (ArgumentException e)
+                {
+                    Console.Error.WriteLine(e.Message);
+                    return 2;
+                }
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
+                    Log("WARNING: ANTHROPIC_API_KEY is not set; the SDK will try other credentials (ant auth login profile)");
+                opus = new OpusBrain(new AnthropicModelClient(config), config.MaxCalls, Log);
+                opus.Called += (ctx, record) =>
+                {
+                    if (runLog == null && ctx.Hello?.ProjectRoot != null)
+                    {
+                        runLog = RunLog.Open(ctx.Hello.ProjectRoot, DateTime.Now);
+                        Log("run log: " + runLog.Path);
+                    }
+                    runLog?.WriteCall(record);
+                };
+                brain = opus;
+                Log("opus brain: model " + config.Model + ", effort " + config.Effort + ", at most " + config.MaxCalls + " calls");
+                if (options.Smoke) return await Smoke(opus);
+            }
+
             using var cts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
             _ = Task.Run(() => ReadKeyboard(cts));
@@ -126,7 +160,39 @@ namespace AgentPlay.Runner
 
             if (session.Finished) Log("finished with exit code " + session.ExitCode);
             else if (session.ExitCodeOnStop != 0) Log("stopped before the run finished; exit code " + session.ExitCodeOnStop);
+            if (opus != null)
+            {
+                string result = session.GameResult ?? (session.Finished ? "stopped" : "unfinished");
+                Log("model calls " + opus.Calls + ", input tokens " + opus.InputTokens + " (cache read " + opus.CacheReadTokens
+                    + ", cache write " + opus.CacheWriteTokens + "), output tokens " + opus.OutputTokens);
+                runLog?.WriteSummary(result, opus.Calls, opus.InputTokens, opus.OutputTokens, opus.CacheReadTokens, opus.CacheWriteTokens);
+                runLog?.Dispose();
+            }
             return session.ExitCodeOnStop;
+        }
+
+        /// <summary>One cheap model call against a made-up game, to check credentials and the request shape.</summary>
+        static async Task<int> Smoke(OpusBrain brain)
+        {
+            var hello = new HelloMessage { Protocol = ProtocolVersion.Current, Game = "Smoke test", Brief = "Walk to the exit." };
+            hello.Observes.Add(new ObserveInfo { Path = "player.zone", ValueType = ValueKinds.String, Description = "Zone the player stands in" });
+            hello.Actions.Add(new ActionInfo
+            {
+                Name = "goto",
+                Description = "Walk to a zone: start or exit",
+                Params = new System.Collections.Generic.List<ActionParamInfo> { new ActionParamInfo { Name = "zone", ValueType = ValueKinds.String } },
+            });
+            hello.Actions.Add(new ActionInfo { Name = "stop", Description = "Stand still", Safe = true });
+            var context = new BrainContext { Hello = hello, State = new Newtonsoft.Json.Linq.JObject { ["player.zone"] = "start" }, PauseReason = "mode" };
+            var plan = await brain.NextPlanAsync(context, CancellationToken.None);
+            if (plan == null)
+            {
+                Log("smoke test failed: " + context.StopReason);
+                return 1;
+            }
+            Log("smoke test plan: " + Newtonsoft.Json.JsonConvert.SerializeObject(plan));
+            Log("smoke test tokens: in " + brain.InputTokens + ", out " + brain.OutputTokens);
+            return 0;
         }
 
         static async Task Send(BridgeClient client, Outgoing msg, CancellationToken ct)
