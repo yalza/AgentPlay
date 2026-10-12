@@ -25,13 +25,15 @@ namespace AgentPlay.Runner.Tests
         [Fact]
         public void ArgumentsRunHeadlessWithSchemaModelAndNoTools()
         {
-            var args = ClaudeCodeModelClient.BuildArguments(Request(), Config()).ToList();
+            var args = ClaudeCodeModelClient.BuildArguments(Request(), Config(), "C:/tmp/system.txt").ToList();
             Assert.Equal("-p", args[0]);
             Assert.Equal("claude-opus-5-5", args[args.IndexOf("--model") + 1]);
             Assert.Equal("high", args[args.IndexOf("--effort") + 1]);
             Assert.Equal("json", args[args.IndexOf("--output-format") + 1]);
             Assert.Equal("{\"type\":\"object\",\"additionalProperties\":false}", args[args.IndexOf("--json-schema") + 1]);
-            Assert.Equal("You play a game.", args[args.IndexOf("--system-prompt") + 1]);
+            // The system prompt goes through a file: the command line is capped at 32,767 characters on Windows.
+            Assert.Equal("C:/tmp/system.txt", args[args.IndexOf("--system-prompt-file") + 1]);
+            Assert.DoesNotContain("You play a game.", args);
             Assert.Equal("", args[args.IndexOf("--tools") + 1]);
             Assert.Contains("--strict-mcp-config", args);
             Assert.Contains("--no-session-persistence", args);
@@ -83,6 +85,46 @@ namespace AgentPlay.Runner.Tests
             var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
                 "{\"is_error\":true,\"api_error_status\":401,\"result\":\"Invalid API key · Please run /login\"}", 10));
             Assert.False(e.Retryable);
+        }
+
+        [Fact]
+        public void LoginErrorWithoutStatusIsNotRetryable()
+        {
+            var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
+                "{\"is_error\":true,\"api_error_status\":null,\"result\":\"Not logged in · Please run /login\"}", 10));
+            Assert.False(e.Retryable);
+        }
+
+        [Fact]
+        public void UsageLimitWithoutStatusIsNotRetryable()
+        {
+            var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
+                "{\"is_error\":true,\"result\":\"You've hit your limit · resets 3pm\"}", 10));
+            Assert.False(e.Retryable);
+        }
+
+        [Fact]
+        public void UnknownErrorWithoutStatusIsRetryable()
+        {
+            var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
+                "{\"is_error\":true,\"result\":\"Request timed out\"}", 10));
+            Assert.True(e.Retryable);
+        }
+
+        [Fact]
+        public void RequestTimeoutStatusIsRetryable()
+        {
+            var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
+                "{\"is_error\":true,\"api_error_status\":408,\"result\":\"Request timeout\"}", 10));
+            Assert.True(e.Retryable);
+        }
+
+        [Fact]
+        public void NonNumericStatusIsReadAsMissing()
+        {
+            var e = Assert.Throws<ModelCallException>(() => ClaudeCodeModelClient.ParseOutput(
+                "{\"is_error\":true,\"api_error_status\":\"oops\",\"result\":\"Overloaded\"}", 10));
+            Assert.True(e.Retryable);
         }
 
         [Fact]

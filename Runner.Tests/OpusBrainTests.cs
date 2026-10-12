@@ -90,6 +90,7 @@ namespace AgentPlay.Runner.Tests
         [Theory]
         [InlineData("not json at all", "end_turn")]
         [InlineData(GoodPlan, "refusal")]
+        [InlineData(GoodPlan, "Refusal")]
         public async Task TwoBadAnswersStopTheBrain(string text, string stopReason)
         {
             var client = new FakeClient();
@@ -137,12 +138,26 @@ namespace AgentPlay.Runner.Tests
             var client = new FakeClient();
             for (int i = 0; i < 5; i++) client.Replies.Enqueue(_ => throw new ModelCallException("down", null));
             var ctx = Context();
-            var brain = Brain(client, maxCalls: 3);
+            var brain = Brain(client, maxCalls: 2);
             var plan = await brain.NextPlanAsync(ctx, CancellationToken.None);
 
             Assert.Null(plan);
-            Assert.Equal(3, brain.Calls);
-            Assert.Equal("call budget of 3 reached", ctx.StopReason);
+            Assert.Equal(2, brain.Calls);
+            Assert.Equal("call budget of 2 reached", ctx.StopReason);
+        }
+
+        [Fact]
+        public async Task RepeatedTransientFailuresStopBeforeTheBudget()
+        {
+            var client = new FakeClient();
+            for (int i = 0; i < 10; i++) client.Replies.Enqueue(_ => throw new ModelCallException("down", null));
+            var ctx = Context();
+            var brain = Brain(client, maxCalls: 40);
+            var plan = await brain.NextPlanAsync(ctx, CancellationToken.None);
+
+            Assert.Null(plan);
+            Assert.Equal(OpusBrain.MaxFailuresInARow, brain.Calls);
+            Assert.Equal("model call failed " + OpusBrain.MaxFailuresInARow + " times in a row: down", ctx.StopReason);
         }
 
         [Fact]

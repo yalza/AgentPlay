@@ -32,14 +32,18 @@ namespace AgentPlay.Runner.Brains
             Directory.CreateDirectory(_workingDirectory);
         }
 
-        public static IReadOnlyList<string> BuildArguments(ModelRequest request, RunnerConfig config) => new[]
+        /// <summary>
+        /// The system prompt goes through a file because Windows caps a command line at 32,767 characters;
+        /// the schema stays inline since the CLI has no file option for it.
+        /// </summary>
+        public static IReadOnlyList<string> BuildArguments(ModelRequest request, RunnerConfig config, string systemPromptFile) => new[]
         {
             "-p",
             "--model", config.Model,
             "--effort", config.Effort,
             "--output-format", "json",
             "--json-schema", request.Schema.ToString(Formatting.None),
-            "--system-prompt", request.System,
+            "--system-prompt-file", systemPromptFile,
             "--tools", "",
             "--strict-mcp-config",
             "--disable-slash-commands",
@@ -47,6 +51,20 @@ namespace AgentPlay.Runner.Brains
         };
 
         public async Task<ModelReply> CompleteAsync(ModelRequest request, CancellationToken ct)
+        {
+            string systemPromptFile = Path.Combine(_workingDirectory, "system-" + Guid.NewGuid().ToString("N") + ".txt");
+            File.WriteAllText(systemPromptFile, request.System, new UTF8Encoding(false));
+            try
+            {
+                return await RunAsync(request, systemPromptFile, ct);
+            }
+            finally
+            {
+                try { File.Delete(systemPromptFile); } catch (IOException) { }
+            }
+        }
+
+        async Task<ModelReply> RunAsync(ModelRequest request, string systemPromptFile, CancellationToken ct)
         {
             var info = new ProcessStartInfo(_executable)
             {
@@ -60,7 +78,7 @@ namespace AgentPlay.Runner.Brains
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
-            foreach (var argument in BuildArguments(request, _config)) info.ArgumentList.Add(argument);
+            foreach (var argument in BuildArguments(request, _config, systemPromptFile)) info.ArgumentList.Add(argument);
 
             var watch = Stopwatch.StartNew();
             Process process;
@@ -79,17 +97,30 @@ namespace AgentPlay.Runner.Brains
                 timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
                 var stdoutTask = process.StandardOutput.ReadToEndAsync();
                 var stderrTask = process.StandardError.ReadToEndAsync();
-                await process.StandardInput.WriteAsync(request.User);
-                process.StandardInput.Close();
                 try
                 {
+                    try
+                    {
+                        await process.StandardInput.WriteAsync(request.User.AsMemory(), timeout.Token);
+                        process.StandardInput.Close();
+                    }
+                    catch (IOException)
+                    {
+                        // The CLI exited before reading its input (bad flag, not logged in); its output says why.
+                    }
                     await process.WaitForExitAsync(timeout.Token);
                 }
                 catch (OperationCanceledException)
                 {
-                    try { process.Kill(true); } catch (InvalidOperationException) { }
+                    Kill(process);
                     if (ct.IsCancellationRequested) throw;
-                    throw new ModelCallException("claude -p timed out after " + TimeoutSeconds + " s", null);
+                    string partial = await StderrAfterKill(stderrTask);
+                    throw new ModelCallException("claude -p timed out after " + TimeoutSeconds + " s" + (partial.Length > 0 ? ": " + partial : ""), null);
+                }
+                catch
+                {
+                    Kill(process);
+                    throw;
                 }
                 string stdout = await stdoutTask;
                 string stderr = await stderrTask;
@@ -113,15 +144,12 @@ namespace AgentPlay.Runner.Brains
                 throw new ModelCallException("claude -p printed something that is not JSON: " + Trim(stdout), e);
             }
 
-            string result = (string)o["result"] ?? "";
-            if ((bool?)o["is_error"] == true)
+            string result = o["result"]?.Type == JTokenType.String ? (string)o["result"] : "";
+            if (o["is_error"]?.Type == JTokenType.Boolean && (bool)o["is_error"])
             {
-                int? status = (int?)o["api_error_status"];
+                int? status = o["api_error_status"]?.Type == JTokenType.Integer ? (int?)o["api_error_status"] : null;
                 string message = "claude -p failed" + (status.HasValue ? " (" + status + ")" : "") + ": " + Trim(result);
-                // Usage limits reset hours later and auth problems need the user; retrying only burns the call budget.
-                bool limit = result.IndexOf("limit", StringComparison.OrdinalIgnoreCase) >= 0 && status == 429;
-                bool clientError = status.HasValue && status >= 400 && status < 500 && status != 429;
-                throw new ModelCallException(message, null, retryable: !limit && !clientError);
+                throw new ModelCallException(message, null, retryable: IsRetryable(status, result));
             }
 
             var usage = o["usage"] as JObject ?? new JObject();
@@ -146,6 +174,39 @@ namespace AgentPlay.Runner.Brains
                 CacheWriteTokens = (long?)usage["cache_creation_input_tokens"] ?? 0,
                 LatencyMs = latencyMs,
             };
+        }
+
+        /// <summary>
+        /// Usage limits reset hours later and login or billing problems need the user, so retrying only burns the
+        /// call budget. The CLI reports some of them without an HTTP status, so the text is checked too.
+        /// </summary>
+        static bool IsRetryable(int? status, string result)
+        {
+            if (status == 408 || status == 409) return true;
+            if (status.HasValue && status >= 400 && status < 500 && status != 429) return false;
+            if (status.HasValue && status >= 500) return true;
+            foreach (var hint in PermanentErrorHints)
+                if (result.IndexOf(hint, StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            return true;
+        }
+
+        static readonly string[] PermanentErrorHints = { "limit", "login", "logged in", "credit", "api key", "unauthorized", "forbidden" };
+
+        static void Kill(Process process)
+        {
+            try { process.Kill(true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { }
+        }
+
+        static async Task<string> StderrAfterKill(Task<string> stderrTask)
+        {
+            try
+            {
+                return Trim(await stderrTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            }
+            catch (Exception)
+            {
+                return "";
+            }
         }
 
         static string Trim(string text)

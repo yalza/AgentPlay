@@ -18,10 +18,13 @@ namespace AgentPlay.InputDriving
 
         public Gamepad Device { get; }
 
+        const string DeviceName = "AgentPlayVirtualGamepad";
+
         VirtualGamepad()
         {
-            Device = InputSystem.AddDevice<Gamepad>("AgentPlayVirtualGamepad");
             _previousBackground = InputSystem.settings.backgroundBehavior;
+            RemoveLeftovers();
+            Device = InputSystem.AddDevice<Gamepad>(DeviceName);
             InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
             _staged = new GamepadState();
             Debug.Log("[AgentPlay] virtual gamepad created");
@@ -42,6 +45,21 @@ namespace AgentPlay.InputDriving
             if (_disposed || !Device.added) return;
             InputSystem.QueueStateEvent(Device, _staged);
             _staged = new GamepadState();
+        }
+
+        /// <summary>
+        /// A domain reload in Play mode drops the wrapper but the Input System keeps the device; remove it so the
+        /// game does not see two gamepads.
+        /// </summary>
+        static void RemoveLeftovers()
+        {
+            var devices = InputSystem.devices.ToArray();
+            foreach (var device in devices)
+                if (device.name.StartsWith(DeviceName, StringComparison.Ordinal))
+                {
+                    InputSystem.RemoveDevice(device);
+                    Debug.LogWarning("[AgentPlay] removed a leftover virtual gamepad");
+                }
         }
 
         public void Dispose()

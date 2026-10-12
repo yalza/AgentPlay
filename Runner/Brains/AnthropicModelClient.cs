@@ -64,9 +64,9 @@ namespace AgentPlay.Runner.Brains
             {
                 throw new ModelCallException("rate limited: " + e.Message, e);
             }
-            catch (Anthropic4xxException e)
+            catch (Anthropic4xxException e) when ((int)e.StatusCode != 408 && (int)e.StatusCode != 409)
             {
-                // Bad request, authentication, permission, not found: retrying cannot help.
+                // Bad request, authentication, permission, not found: retrying cannot help. 408 and 409 are transient.
                 throw new ModelCallException(e.GetType().Name + ": " + e.Message, e, retryable: false);
             }
             catch (Exception e)

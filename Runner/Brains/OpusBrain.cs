@@ -26,6 +26,8 @@ namespace AgentPlay.Runner.Brains
 
         /// <summary>Waits before retrying a failed call; the last value repeats.</summary>
         public int[] RetryDelaysMs { get; set; } = { 2000, 10000 };
+        /// <summary>Transient failures in a row that end the run, so a dead backend does not drain the call budget.</summary>
+        public const int MaxFailuresInARow = 3;
 
         public event Action<BrainContext, CallRecord> Called;
 
@@ -86,7 +88,7 @@ namespace AgentPlay.Runner.Brains
 
         static Plan Parse(ModelReply reply, BrainContext context, out string error)
         {
-            if (reply.StopReason == "refusal")
+            if (string.Equals(reply.StopReason, "refusal", StringComparison.OrdinalIgnoreCase))
             {
                 error = "the model declined to answer (refusal)";
                 return null;
@@ -138,6 +140,12 @@ namespace AgentPlay.Runner.Brains
                 }
                 catch (ModelCallException e)
                 {
+                    if (attempt + 1 >= MaxFailuresInARow)
+                    {
+                        context.StopReason = "model call failed " + MaxFailuresInARow + " times in a row: " + e.Message;
+                        _log(context.StopReason);
+                        return null;
+                    }
                     int delay = RetryDelaysMs[Math.Min(attempt, RetryDelaysMs.Length - 1)];
                     _log("model call failed (" + e.Message + "); retrying in " + delay + " ms");
                     if (delay > 0) await Task.Delay(delay, ct);
