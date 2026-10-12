@@ -23,3 +23,6 @@ Testbed/*.sln
 /Demos/*/*.sln
 /Demos/*/AgentPlay/Traces/
 /Demos/*/AgentPlay/Runs/
+
+# End-to-end logs for games outside this repo
+/.e2e/

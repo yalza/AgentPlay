@@ -48,8 +48,8 @@ namespace AgentPlay.Runner.Tests
 
         [Theory]
         [InlineData("--brain script", "--brain script needs a value")]
-        [InlineData("--brain opus", "M2b")]
-        [InlineData("--brain manual", "M2b")]
+        [InlineData("--brain manual", "Unknown brain")]
+        [InlineData("--brain opus --effort huge", "effort")]
         [InlineData("--brain fancy", "Unknown brain")]
         [InlineData("--brain script f.json --mode realtime", "turn_based")]
         [InlineData("--brain script f.json --auto-resume", "--auto-resume")]
@@ -66,6 +66,19 @@ namespace AgentPlay.Runner.Tests
             var outgoing = s.Handle(Env(MessageTypes.Hello, Hello()));
             Assert.Contains("  observe guards : list [distance:float]", _printed);
             Assert.Equal(MessageTypes.SetMode, Assert.Single(outgoing).Type);
+        }
+
+        [Fact]
+        public void OpusBrainOptions()
+        {
+            var o = RunnerOptions.Parse(new[] { "--brain", "opus", "--model", "claude-opus-5-5", "--effort", "medium", "--max-calls", "7" });
+            Assert.Equal("opus", o.Brain);
+            Assert.Equal(Modes.TurnBased, o.Mode);
+            Assert.Equal("claude-opus-5-5", o.Model);
+            Assert.Equal("medium", o.Effort);
+            Assert.Equal(7, o.MaxCalls);
+            var smoke = RunnerOptions.Parse(new[] { "--smoke" });
+            Assert.True(smoke.Smoke);
         }
 
         [Fact]
@@ -123,7 +136,7 @@ namespace AgentPlay.Runner.Tests
             s.Handle(Env(MessageTypes.Hello, Hello()));
             Assert.Empty(s.OnPlan(null));
             Assert.Equal(RunnerSession.ExitBrainStopped, s.ExitCode);
-            Assert.Contains("brain has no more plans", _printed);
+            Assert.Contains("brain stopped: no more plans", _printed);
         }
 
         [Theory]

@@ -86,7 +86,7 @@ namespace AgentPlay.Runner
         {
             if (plan == null)
             {
-                _print("brain has no more plans");
+                _print("brain stopped: " + (_context.StopReason ?? "no more plans"));
                 Finish(ExitBrainStopped);
                 return new Outgoing[0];
             }
@@ -179,6 +179,9 @@ namespace AgentPlay.Runner
                     var s = env.As<PlanStatusMessage>();
                     _print("plan_status " + s.PlanId + " " + s.Status + " step=" + s.Step + " reason=" + s.Reason);
                     _context.PlanStatuses.Add(s);
+                    if ((s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) && _context.LastPlan != null && s.PlanId == _context.LastPlan.Id)
+                        _context.History.Add(_context.LastPlan.Id + ": " + _context.LastPlan.Intent + " -> " + s.Status
+                            + (string.IsNullOrEmpty(s.Reason) ? "" : " (" + s.Reason + ")"));
                     if (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) _answeredPauseT = null;
                     break;
 

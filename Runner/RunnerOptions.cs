@@ -7,8 +7,8 @@ namespace AgentPlay.Runner
     public sealed class RunnerOptions
     {
         public const string Usage =
-            "Usage: AgentPlay.Runner [--brain script <file>] [--mode turn_based|realtime] [--auto-resume] " +
-            "[--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
+            "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--backend claude-code|api] [--model M] [--effort E] [--max-calls N]] [--smoke] " +
+            "[--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
 
         public string Host = "127.0.0.1";
         public int FirstPort = 47800;
@@ -21,6 +21,13 @@ namespace AgentPlay.Runner
         /// <summary>null keeps the M1 behaviour (print and optionally auto-resume); "script" plays plans from a file.</summary>
         public string Brain;
         public string ScriptPath;
+        /// <summary>Overrides for runner.json (null keeps the file's value).</summary>
+        public string Model;
+        public string Effort;
+        public int? MaxCalls;
+        public string Backend;
+        /// <summary>Make one model call against a made-up game and exit.</summary>
+        public bool Smoke;
 
         public static RunnerOptions Parse(string[] args)
         {
@@ -37,9 +44,9 @@ namespace AgentPlay.Runner
                             o.Brain = brain;
                             o.ScriptPath = Value(args, ref i, "--brain script");
                         }
-                        else if (brain == "opus" || brain == "manual")
+                        else if (brain == "opus")
                         {
-                            throw new ArgumentException("--brain " + brain + " is not available yet (arrives in M2b)");
+                            o.Brain = brain;
                         }
                         else
                         {
@@ -49,6 +56,26 @@ namespace AgentPlay.Runner
                     case "--mode":
                         o.Mode = Value(args, ref i, a);
                         if (!Modes.IsKnown(o.Mode)) throw new ArgumentException("Unknown mode: " + o.Mode);
+                        break;
+                    case "--model":
+                        o.Model = Value(args, ref i, a);
+                        break;
+                    case "--effort":
+                        o.Effort = Value(args, ref i, a);
+                        if (Array.IndexOf(RunnerConfig.Efforts, o.Effort) < 0)
+                            throw new ArgumentException("--effort must be one of " + string.Join(", ", RunnerConfig.Efforts));
+                        break;
+                    case "--max-calls":
+                        o.MaxCalls = (int)Number(Value(args, ref i, a), a);
+                        if (o.MaxCalls <= 0) throw new ArgumentException("--max-calls must be positive");
+                        break;
+                    case "--backend":
+                        o.Backend = Value(args, ref i, a);
+                        if (Array.IndexOf(RunnerConfig.Backends, o.Backend) < 0)
+                            throw new ArgumentException("--backend must be one of " + string.Join(", ", RunnerConfig.Backends));
+                        break;
+                    case "--smoke":
+                        o.Smoke = true;
                         break;
                     case "--auto-resume":
                         o.AutoResume = true;

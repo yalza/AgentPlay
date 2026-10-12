@@ -64,7 +64,7 @@ Opus 5.5 tự chơi hai game Unity khác nhau ở chế độ theo lượt, qua 
 | `AgentExecutorHost` | Runtime | MonoBehaviour ẩn tạo khi có Plan, gọi `ExecutorCore` trong `Update` |
 | `VirtualGamepad` | asmdef `AgentPlay.InputSystem` | Tay cầm ảo cho adapter (mục 9), chỉ biên dịch khi project có Input System |
 | `SessionLoop` | Runner | Vòng chính: nhận sự kiện, quyết định gọi model, gửi Plan, dừng khi `game.won`/`game.lost` |
-| `ModelClient` (`IModelClient`) | Runner | Gọi Opus qua SDK chính thức `Anthropic` trên NuGet; có bản giả `ScriptedModelClient` |
+| `ModelClient` (`IModelClient`) | Runner | Hai cài đặt: `ClaudeCodeModelClient` gọi Claude Code CLI (`claude -p --json-schema`, dùng gói Claude đang đăng nhập, mặc định) và `AnthropicModelClient` gọi Messages API qua SDK chính thức `Anthropic` 12.55.0 (cần khóa API; structured outputs, cache phần system, `effort`, server-side fallback `"default"`); test dùng bản giả |
 | `PromptBuilder` | Runner | Dựng phần prompt cố định (cache) và phần mỗi lượt |
 | `RunLog` | Runner | Ghi mỗi lượt gọi model: thời gian, token, Plan, kết quả |
 
@@ -156,16 +156,16 @@ Editor dừng và gửi `paused` khi: Plan xong (`plan_done`), Plan hỏng (`pla
 
 ## 8. Runner gọi Opus
 
-- **SDK:** package NuGet `Anthropic` (SDK C# chính thức, bản 10 trở lên). Bước đầu tiên của plan kiểm tra SDK hỗ trợ `cache_control` và tool use với `tool_choice` bắt buộc. Nếu thiếu, `ModelClient` gọi HTTP trực tiếp với cùng interface.
-- **Đầu ra có cấu trúc:** model phải gọi tool `submit_plan`, input schema là JSON schema của Plan. Không parse văn bản tự do.
+- **Đường gọi model:** `runner.json` chọn `backend`. `claude-code` (mặc định) chạy `claude -p` ở chế độ không công cụ, không MCP, không lưu phiên, trong một thư mục trống; dùng gói Claude của người dùng, không cần khóa API, mức dùng tính vào hạn mức của gói. `api` gọi Messages API qua SDK C# chính thức `Anthropic` 12.55.0 (đã kiểm biên dịch: structured outputs, cache, effort, fallback), cần `ANTHROPIC_API_KEY` hoặc profile `ant auth login`.
+- **Đầu ra có cấu trúc:** Plan lấy qua structured outputs (API: `output_config.format`; CLI: `--json-schema`) với schema sinh từ `hello`: mỗi action là một biến thể `anyOf` có `args` đúng tham số; `until` là chuỗi, rỗng nghĩa là không có. Opus 5.5 không cho ép `tool_choice`, nên không dùng tool `submit_plan`. Mỗi lượt là một request độc lập (system cố định cộng một tin nhắn user); không giữ lịch sử hội thoại.
 - **Prompt:**
   - Phần cố định, đánh dấu cache: hướng dẫn chung về DSL và cách chơi theo lượt; `brief`; danh sách observe, action (tham số, mô tả, action an toàn), sự kiện đã khai báo.
   - Phần mỗi lượt: snapshot hiện tại; tối đa 20 sự kiện kể từ Plan trước; Plan trước và kết quả (`plan_done`, lý do hỏng, luật đã bắn); tóm tắt 5 Plan gần nhất (intent và kết quả).
 - **Kiểm Plan:** `PlanValidator` trả danh sách lỗi; có lỗi thì gửi lại cho model một lần kèm lỗi; vẫn sai thì gửi `stop_plan`, ghi `RunLog` và thử lại ở lượt sau.
 - **Lỗi API:** quá 60 giây hoặc lỗi mạng thì thử lại một lần sau 2 giây; vẫn lỗi thì để game ở hành vi an toàn, chờ 10 giây rồi thử tiếp. Ở chế độ theo lượt, game đang dừng nên không có hậu quả gameplay.
 - **Giới hạn chi phí:** `--max-calls` (mặc định 40) mỗi phiên; đạt giới hạn thì runner dừng gọi model, in tổng token và thoát.
-- **Cấu hình:** `runner.json` cạnh file chạy chứa model id (mặc định `claude-opus-5-5`), `max_tokens`, giới hạn. Khóa API đọc từ biến môi trường `ANTHROPIC_API_KEY`, không ghi vào file.
-- **Chế độ bộ não:** `--brain opus` (mặc định), `--brain script <file>` (đọc chuỗi Plan định sẵn, dùng cho E2E không tốn tiền), `--brain manual` (in trạng thái, chờ dán Plan JSON; để debug). M2a chỉ có `--brain script`; không có `--brain` thì runner chạy như M1. `opus` và `manual` đến ở M2b.
+- **Cấu hình:** `runner.json` cạnh file chạy chứa model id (mặc định `claude-opus-5-5`), `max_tokens`, giới hạn. `backend` (`claude-code` hoặc `api`) và `effort` (mặc định `high`) cũng nằm ở đây. Khóa API (chỉ cho `api`) đọc từ biến môi trường `ANTHROPIC_API_KEY`, không ghi vào file.
+- **Chế độ bộ não:** `--brain opus` (ghi đè được `--backend`, `--model`, `--effort`, `--max-calls`), `--brain script <file>` (đọc chuỗi Plan định sẵn, dùng cho E2E không tốn tiền). Không có `--brain` thì runner chạy như M1. `--smoke` gọi model một lần với game giả để kiểm đường gọi. Bỏ `--brain manual` vì luồng bàn phím của runner đã dùng stdin.
 - **RunLog:** `<project_root>/AgentPlay/Runs/<thời gian>.ndjson`, mỗi dòng một lượt: thời điểm, model, độ trễ, token vào, ra, đọc từ cache, Plan, kết quả. Cuối phiên ghi tổng.
 
 ---
@@ -200,7 +200,7 @@ Code adapter nằm trong repo TileThieves, thư mục `Assets/_Project/Scripts/A
 - `versionDefines`: `com.agentplay.core` → `TT_AGENTPLAY`; `defineConstraints`: `TT_AGENTPLAY`. Không có package thì asmdef không biên dịch, máy đồng đội và CI không bị ảnh hưởng.
 - Không sửa file game nào. Adapter đọc qua API public đã có: `NoiseSystem.Instance` (`DisplayValue`, `DisplayLevel`), `PryTool` (`AimedCell`, `AimInReach`, `IsPrying`, `TilesPried`), `PlayerSack.Inventory`, `PaintingRuntime` (`TileRemoved`, `CellCenterWorld`, `WorldToCell`), `PlayerController`.
 - Sự kiện phát từ adapter: đăng ký `PaintingRuntime.TileRemoved` (`tile.pried`), theo dõi đổi mức ồn (`noise.level_up`, quan trọng khi lên mức cao), số gạch trong bao (`tile.collected`), đạt mục tiêu (`game.won`), ồn lên mức cao nhất (`game.lost`).
-- Action lái nhân vật bằng `VirtualGamepad`: `goto_painting()`, `aim_next_tile()`, `pry(count)`, `collect_loose()`, `crouch(on)`, `stop()` (an toàn). Cách nhắm dùng vòng điều khiển kín: xoay `rightStick` tới khi `PryTool.AimedCell` trùng ô mục tiêu.
+- Action lái nhân vật bằng `VirtualGamepad`: `goto_painting()`, `aim_next_tile()`, `pry(count)`, `collect_loose()`, `crouch(on)`, `stop()` (an toàn). Cách nhắm dùng vòng điều khiển kín: xoay `rightStick` theo sai số góc của camera tới ô mục tiêu, xong khi tâm ngắm nằm trên một ô trong tầm với. Tay cầm ảo chỉ được tạo khi agent gọi action đầu tiên; trong lúc nó tồn tại, `InputSystem.settings.backgroundBehavior` là `IgnoreFocus`. Observe `loose.count` dùng `LooseTilePool.ActiveTiles`. Mục tiêu 6 viên là hằng số `TileThievesAgent.GoalTiles`. Thay đổi `Packages/packages-lock.json` do package nhúng không được commit vào TileThieves.
 - `TileThieves/AgentPlay/brief.md` mô tả mục tiêu N viên và giới hạn ồn.
 - Danh sách thành viên chính xác của các lớp trên sẽ được kiểm lại trong bước đầu của plan TileThieves, vì code TileThieves có thể đã đổi.
 
@@ -223,7 +223,7 @@ Code adapter nằm trong repo TileThieves, thư mục `Assets/_Project/Scripts/A
 | Runner mất kết nối giữa Plan | Executor chạy nốt Plan, rồi hành vi an toàn; theo lượt thì dừng ở lần dừng kế tiếp |
 | Không có action `Safe` | Không có hành vi an toàn; `waiting` vẫn được gửi; registry cảnh báo một lần |
 | Thiếu `brief.md` | `hello.brief` rỗng, runner in cảnh báo, vẫn chạy |
-| Thiếu `ANTHROPIC_API_KEY` với `--brain opus` | Runner thoát ngay với thông báo rõ ràng |
+| Đường `api` không có thông tin xác thực, hoặc `claude -p` hết hạn mức gói | Lỗi không thử lại (4xx, hạn mức): bộ não dừng ngay với lý do rõ ràng, runner thoát mã 4; lỗi tạm thời (5xx, mạng) thử lại trong giới hạn lượt gọi |
 
 ---
 
@@ -252,9 +252,9 @@ M2 chia làm ba plan, mỗi plan tự kiểm được:
 
 ## 16. Rủi ro và điều chưa kiểm chứng
 
-1. SDK `Anthropic` có hỗ trợ `cache_control` và `tool_choice` bắt buộc không: kiểm ở bước đầu M2b; dự phòng là HTTP trực tiếp.
+1. SDK `Anthropic`: đã kiểm biên dịch structured outputs, cache, effort và fallback. Opus 5.5 không cho ép `tool_choice` nên dùng structured outputs. Người dùng chỉ có gói Claude nên đường mặc định là Claude Code CLI; đường API chưa được chạy thật.
 2. Opus có viết được Plan nhiều bước đủ tốt để thắng 3/5 ván Heist không: chỉ biết sau M2b. Nếu không đạt, giảm độ dài Plan và thêm ví dụ Plan mẫu vào phần cache.
-3. Junction trong `Packages/` được Unity nhận là embedded package và `versionDefines` hoạt động với nó: kiểm ở đầu M2c.
-4. Tay cầm ảo được `ThiefInput` của TileThieves nhận khi Editor không có focus: kiểm ở đầu M2c.
-5. Nhắm ô gạch bằng vòng điều khiển kín có hội tụ không, với độ nhạy tay cầm 180°/giây của TileThieves: kiểm ở M2c; dự phòng là giảm biên độ stick khi gần mục tiêu.
+3. Junction trong `Packages/` được Unity nhận là embedded package và `versionDefines` hoạt động với nó: đã kiểm ở M2c: Unity nhận junction là embedded package, adapter biên dịch, và gỡ junction thì adapter bị loại sạch (TileThieves vẫn biên dịch, `LogicTests` 217/217).
+4. Tay cầm ảo được `ThiefInput` của TileThieves nhận khi Editor không có focus: đã kiểm ở M2c: E2E chạy khi cửa sổ Unity ở nền, tay cầm ảo vẫn được nhận nhờ `backgroundBehavior = IgnoreFocus`.
+5. Nhắm ô gạch bằng vòng điều khiển kín có hội tụ không, với độ nhạy tay cầm 180°/giây của TileThieves: đã kiểm ở M2c: hội tụ ngay ở lần chạy đầu với độ lợi 1/25 độ.
 6. Chi phí Opus cho tiêu chí 2 và 3: ước tính trước khi chạy, dừng nếu vượt giới hạn `--max-calls`.

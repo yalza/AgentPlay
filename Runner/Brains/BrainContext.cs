@@ -21,6 +21,10 @@ namespace AgentPlay.Runner.Brains
         public readonly List<PlanStatusMessage> PlanStatuses = new List<PlanStatusMessage>();
         public Plan LastPlan;
         public int PlansSent;
+        /// <summary>One line per finished plan: "id: intent -> status (reason)", oldest first.</summary>
+        public readonly List<string> History = new List<string>();
+        /// <summary>Set by a brain that returns null, to explain why it stopped.</summary>
+        public string StopReason;
     }
 
     public interface IBrain
