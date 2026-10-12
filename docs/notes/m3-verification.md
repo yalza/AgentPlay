@@ -3,8 +3,8 @@
 Ngày chạy: 2026-10-13 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315, Claude Code CLI đăng nhập bằng gói Claude, model `claude-opus-5-5`)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 288/288 passed
-- `Tools/unity-tests.sh`: 136/136 passed
+- `dotnet test AgentPlay.sln`: 291/291 passed (sau vòng sửa theo review)
+- `Tools/unity-tests.sh`: 140/140 passed (sau vòng sửa theo review)
 - `Tools/check-generic.sh`: OK
 - `Tools/e2e-m3-reflex.sh` (không gọi model): ALL CHECKS PASSED, ba lần (phản xạ đặt sẵn hai lần, phản xạ học được một lần)
 - `Tools/e2e-m3-learn.sh` (gọi model thật): ALL CHECKS PASSED
@@ -59,6 +59,22 @@ Ngày chạy: 2026-10-13 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315, Claud
 - Kết thúc Play mode từng tạo `reflexes.json` rỗng cho game không có phản xạ. Đã sửa, có test.
 - Người chơi giả ban đầu không bao giờ bị phát hiện nên trace không có gì để học. Đã sửa để nó đi lấy `item_b` đúng lúc lính gác đang đi tới.
 - Một lần `e2e-m2a` bị treo ở bước thoát Unity sau khi thắng (Unity không chạy lệnh `Exit` hẹn trước). Chạy lại thì đạt. Lỗi nằm ở đường thoát của AutoPlay demo, không phải ở AgentPlay.
+
+## Review độc lập
+Một reviewer có ngữ cảnh mới kết luận "merge được sau khi sửa": 0 lỗi nghiêm trọng, 3 lỗi quan trọng, 11 lỗi nhỏ. Năm tình huống trong Review Focus của plan đều đạt.
+
+Đã sửa, mỗi lỗi có test fail trước khi sửa:
+- Phản xạ chạy lại trong thời gian cooldown nếu sự kiện lặp lại khi nó còn đang chạy.
+- Cửa sổ AgentPlay giữ bản `reflexes.json` từ trước Play và có thể ghi đè thống kê hoặc trạng thái tự tắt. Mọi thao tác duyệt giờ đọc lại file trước.
+- Hai lần `reflect` chạy cùng lúc làm mất cập nhật playbook. Giờ có file khóa; lần chạy thứ hai thoát mã 5.
+
+Bốn lỗi nhỏ được nâng mức vì người dùng sẽ gặp và bị chặn:
+- Mục `null` trong `reflexes.json` làm hỏng lúc bắt đầu Play.
+- Một trace lạ hoặc `reflected.json` hỏng làm `reflect` lỗi mãi.
+- Nút học có thể kẹt ở "Learning..." nếu runner thoát ngay. Đã sửa thứ tự; race này không tái hiện được một cách tất định nên chỉ kiểm bằng lập luận.
+- Lỗi GUILayout mỗi lần bấm duyệt. Đã sửa; phần giao diện chỉ kiểm bằng lập luận.
+
+Sau vòng sửa, `e2e-m3-reflex.sh` và `e2e-m2a.sh` đạt lại. Các lỗi nhỏ còn lại được hoãn, có danh sách trong ledger của plan.
 
 ## Giới hạn đã biết
 - Giao diện cửa sổ AgentPlay mới được biên dịch, chưa được người dùng thao tác thật. Logic duyệt nằm trong `ReflexBook` và đã có test.
