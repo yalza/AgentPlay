@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "policy": { "eval_window_s": 10, "min_fires": 5, "max_fail_rate": 0.3 },
+  "reflexes": [
+    {
+      "id": "R-fixture",
+      "lesson_id": "",
+      "text": "When a guard spots you, hide behind the nearest cover",
+      "when": "event:guard.spotted",
+      "do": "hide_nearest",
+      "args": {},
+      "cooldown_s": 1,
+      "status": "active",
+      "game_version": "m3",
+      "stats": { "fired": 0, "good": 0, "bad": 0 },
+      "note": ""
+    }
+  ]
+}

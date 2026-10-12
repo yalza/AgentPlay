@@ -1,0 +1,46 @@
+{
+  "plans": [
+    {
+      "id": "x1",
+      "intent": "Take item_a, which the guard cannot see",
+      "steps": [
+        { "do": "goto", "args": { "zone": "item_a" } },
+        { "do": "pick", "args": { "item": "item_a" } }
+      ],
+      "rules": [],
+      "timeout_s": 30
+    },
+    {
+      "id": "x2",
+      "intent": "Walk to item_b while the guard comes north, so it spots the thief; no rule handles guard.spotted",
+      "steps": [
+        { "do": "wait", "args": { "seconds": 40 }, "until": "any(guards.moving_north) && min(guards.z) > -4.5 && min(guards.z) < -2" },
+        { "do": "goto", "args": { "zone": "item_b" } },
+        { "do": "pick", "args": { "item": "item_b" } },
+        { "do": "hide", "args": { "zone": "cover_1" } }
+      ],
+      "rules": [],
+      "timeout_s": 90
+    },
+    {
+      "id": "x3",
+      "intent": "Wait until the guard walks north past the middle, then grab item_c and hide",
+      "steps": [
+        { "do": "wait", "args": { "seconds": 30 }, "until": "any(guards.moving_north) && min(guards.z) > -1 && min(guards.z) < 1" },
+        { "do": "goto", "args": { "zone": "item_c" } },
+        { "do": "pick", "args": { "item": "item_c" } },
+        { "do": "hide", "args": { "zone": "cover_1" } }
+      ],
+      "rules": [],
+      "timeout_s": 60
+    },
+    {
+      "id": "x4",
+      "intent": "Leave through the exit with all three items",
+      "steps": [
+        { "do": "goto", "args": { "zone": "exit" } }
+      ],
+      "timeout_s": 30
+    }
+  ]
+}
