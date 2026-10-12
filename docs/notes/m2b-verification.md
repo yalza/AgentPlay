@@ -3,7 +3,7 @@
 Ngày chạy: 2026-10-13 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315, Claude Code CLI đăng nhập bằng gói Claude)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 212/212 passed, 0 failed
+- `dotnet test AgentPlay.sln`: 219/219 passed, 0 failed (sau vòng sửa theo review)
 - `Tools/unity-tests.sh`: 108/108 passed, 0 failed
 - `Tools/check-generic.sh`: OK
 - `AgentPlay.Runner --brain opus --smoke`: trả về Plan hợp lệ sau 8,2 giây
@@ -24,6 +24,12 @@ Lệnh: `bash Tools/run-heist-opus.sh 5` (backend `claude-code`, model `claude-o
 - Phần system được cache: từ lượt thứ hai mỗi ván đọc 3388 token từ cache. Với backend `claude-code`, mức dùng tính vào hạn mức của gói; runner chưa ghi số tiền quy đổi (`total_cost_usd`).
 - Luật phản xạ hoạt động thật: ở ván 5, Plan p3 có luật `guard.spotted → replan`; luật kích hoạt sau 0,95 giây game, Opus lập Plan p4 nấp sau `cover_1`, rồi thắng.
 - Một Plan bị từ chối (ván 1): Opus viết `guards[0]...` trong `until`, mà ngôn ngữ điều kiện không có chỉ số danh sách. Bộ não gửi lại lỗi kiểm tra cho model, lần gọi sau trả Plan hợp lệ. Cái giá là một lượt gọi thêm (19,3 giây).
+
+## Sửa sau review
+- System prompt truyền qua `--system-prompt-file` thay vì dòng lệnh (Windows giới hạn 32.767 ký tự). Smoke test thật vẫn đạt (9,7 giây).
+- CLI thoát trước khi đọc stdin không còn làm runner tưởng mất kết nối Unity; khi quá thời gian, lỗi kèm phần cuối stderr.
+- Lỗi chưa đăng nhập, hết credit, hết hạn mức mà CLI báo không kèm mã HTTP: không thử lại. Ba lỗi tạm thời liên tiếp thì bộ não dừng, không đốt hết ngân sách lượt gọi.
+- Đường `api`: 408 và 409 được thử lại; `refusal` so khớp không phân biệt hoa thường.
 
 ## Rủi ro trong spec M2 mục 14
 1. SDK `Anthropic`: đã kiểm biên dịch. Đường `api` chưa chạy thật vì người dùng chỉ có gói Claude.
