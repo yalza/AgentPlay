@@ -16,16 +16,52 @@ namespace AgentPlay
         }
     }
 
-    /// <summary>Marks a method the agent may call. It must return AgentActionStatus and take only float/int/bool/string.</summary>
+    /// <summary>
+    /// Exposes an IEnumerable&lt;T&gt; as a list observe. T's [AgentObserve] members become the element fields,
+    /// and T contributes no top-level observes.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    public sealed class AgentObserveListAttribute : Attribute
+    {
+        public string Path { get; }
+        public string Description { get; }
+
+        public AgentObserveListAttribute(string path, string description = "")
+        {
+            Path = path;
+            Description = description ?? "";
+        }
+    }
+
+    /// <summary>
+    /// Marks a method the agent may call every frame until it returns Done or Failed. Parameters: an optional
+    /// AgentActionContext first, then float/int/bool/string.
+    /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
     public sealed class AgentActionAttribute : Attribute
     {
         public string Name { get; }
         public string Description { get; }
-        /// <summary>The single default action run while no plan is available.</summary>
+        /// <summary>The single default action run while no plan is available. Must take no parameters.</summary>
         public bool Safe { get; set; }
 
         public AgentActionAttribute(string name, string description = "")
+        {
+            Name = name;
+            Description = description ?? "";
+        }
+    }
+
+    /// <summary>Declares an event the game emits, so plans can react to it with "event:name".</summary>
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
+    public sealed class AgentEventInfoAttribute : Attribute
+    {
+        public string Name { get; }
+        public string Description { get; }
+        public bool Important { get; set; }
+        public AgentOutcome Outcome { get; set; }
+
+        public AgentEventInfoAttribute(string name, string description = "")
         {
             Name = name;
             Description = description ?? "";
@@ -44,6 +80,14 @@ namespace AgentPlay
         {
             Name = name;
         }
+    }
+
+    /// <summary>Optional first parameter of an action: lets it tell its first frame from later ones.</summary>
+    public sealed class AgentActionContext
+    {
+        public bool IsFirstFrame { get; set; } = true;
+        /// <summary>Game seconds since the action started.</summary>
+        public double Elapsed { get; set; }
     }
 
     public enum AgentActionStatus { Running, Done, Failed }

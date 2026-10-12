@@ -49,9 +49,10 @@ namespace AgentPlay
 
         public static bool IsAnnotated(Type t)
         {
-            if (t.IsDefined(typeof(AgentGameAttribute), false)) return true;
+            if (t.IsDefined(typeof(AgentGameAttribute), false) || t.IsDefined(typeof(AgentEventInfoAttribute), false)) return true;
             foreach (var m in t.GetMembers(MemberFlags))
-                if (m.IsDefined(typeof(AgentObserveAttribute), false) || m.IsDefined(typeof(AgentActionAttribute), false))
+                if (m.IsDefined(typeof(AgentObserveAttribute), false) || m.IsDefined(typeof(AgentObserveListAttribute), false)
+                    || m.IsDefined(typeof(AgentActionAttribute), false))
                     return true;
             return false;
         }

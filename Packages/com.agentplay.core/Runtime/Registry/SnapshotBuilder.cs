@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Reflection;
 using AgentPlay.Contract;
 using Newtonsoft.Json.Linq;
@@ -8,36 +9,65 @@ namespace AgentPlay
 {
     public static class SnapshotBuilder
     {
+        public const int MaxListItems = 16;
+
         /// <summary>Reads every observe into a flat object keyed by path. Unreadable values become null.</summary>
         public static JObject Build(RegistryModel model, Func<Type, object> resolveInstance, Action<string> warn = null)
         {
             var o = new JObject();
             foreach (var e in model.Observes)
-                o[e.Path] = Read(e, resolveInstance, warn);
+            {
+                object target = null;
+                if (!e.IsStatic)
+                {
+                    target = resolveInstance(e.DeclaringType);
+                    if (target == null)
+                    {
+                        o[e.Path] = e.ValueKind == ValueKinds.List ? (JToken)new JArray() : JValue.CreateNull();
+                        continue;
+                    }
+                }
+                o[e.Path] = e.ValueKind == ValueKinds.List ? ReadList(e, target, warn) : Read(e, target, warn);
+            }
             return o;
         }
 
-        static JToken Read(ObserveEntry e, Func<Type, object> resolveInstance, Action<string> warn)
+        static JToken ReadList(ObserveEntry e, object target, Action<string> warn)
         {
-            object target = null;
-            if (!e.IsStatic)
+            var array = new JArray();
+            if (!(ReadRaw(e, target, warn, out var raw) && raw is IEnumerable items)) return array;
+            foreach (var item in items)
             {
-                target = resolveInstance(e.DeclaringType);
-                if (target == null) return JValue.CreateNull();
+                if (item == null) continue;
+                if (array.Count == MaxListItems)
+                {
+                    warn?.Invoke("Observe list '" + e.Path + "' has more than " + MaxListItems + " items; extra items are dropped");
+                    break;
+                }
+                var element = new JObject();
+                foreach (var field in e.Fields) element[field.Path] = Read(field, item, warn);
+                array.Add(element);
             }
+            return array;
+        }
 
-            object value;
+        static JToken Read(ObserveEntry e, object target, Action<string> warn) =>
+            ReadRaw(e, target, warn, out var value) ? ToToken(e.ValueKind, value) : JValue.CreateNull();
+
+        static bool ReadRaw(ObserveEntry e, object target, Action<string> warn, out object value)
+        {
             try
             {
                 value = e.Member is FieldInfo f ? f.GetValue(target) : ((PropertyInfo)e.Member).GetValue(target);
+                return true;
             }
             catch (Exception ex)
             {
                 var inner = ex is TargetInvocationException tie && tie.InnerException != null ? tie.InnerException : ex;
                 warn?.Invoke("Observe '" + e.Path + "' threw: " + inner.Message);
-                return JValue.CreateNull();
+                value = null;
+                return false;
             }
-            return ToToken(e.ValueKind, value);
         }
 
         static JToken ToToken(string kind, object value)
