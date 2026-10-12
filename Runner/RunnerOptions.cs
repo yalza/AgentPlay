@@ -7,7 +7,7 @@ namespace AgentPlay.Runner
     public sealed class RunnerOptions
     {
         public const string Usage =
-            "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--model M] [--effort E] [--max-calls N]] [--smoke] " +
+            "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--backend claude-code|api] [--model M] [--effort E] [--max-calls N]] [--smoke] " +
             "[--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
 
         public string Host = "127.0.0.1";
@@ -25,6 +25,7 @@ namespace AgentPlay.Runner
         public string Model;
         public string Effort;
         public int? MaxCalls;
+        public string Backend;
         /// <summary>Make one model call against a made-up game and exit.</summary>
         public bool Smoke;
 
@@ -67,6 +68,11 @@ namespace AgentPlay.Runner
                     case "--max-calls":
                         o.MaxCalls = (int)Number(Value(args, ref i, a), a);
                         if (o.MaxCalls <= 0) throw new ArgumentException("--max-calls must be positive");
+                        break;
+                    case "--backend":
+                        o.Backend = Value(args, ref i, a);
+                        if (Array.IndexOf(RunnerConfig.Backends, o.Backend) < 0)
+                            throw new ArgumentException("--backend must be one of " + string.Join(", ", RunnerConfig.Backends));
                         break;
                     case "--smoke":
                         o.Smoke = true;

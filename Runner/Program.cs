@@ -19,6 +19,7 @@ namespace AgentPlay.Runner
         {
             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
 
             RunnerOptions options;
             try
@@ -56,6 +57,7 @@ namespace AgentPlay.Runner
                 if (options.Model != null) config.Model = options.Model;
                 if (options.Effort != null) config.Effort = options.Effort;
                 if (options.MaxCalls.HasValue) config.MaxCalls = options.MaxCalls.Value;
+                if (options.Backend != null) config.Backend = options.Backend;
                 try
                 {
                     config.Validate();
@@ -65,9 +67,18 @@ namespace AgentPlay.Runner
                     Console.Error.WriteLine(e.Message);
                     return 2;
                 }
-                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
-                    Log("WARNING: ANTHROPIC_API_KEY is not set; the SDK will try other credentials (ant auth login profile)");
-                opus = new OpusBrain(new AnthropicModelClient(config), config.MaxCalls, Log);
+                IModelClient client;
+                if (config.Backend == "api")
+                {
+                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
+                        Log("WARNING: ANTHROPIC_API_KEY is not set; the SDK will try other credentials (ant auth login profile)");
+                    client = new AnthropicModelClient(config);
+                }
+                else
+                {
+                    client = new ClaudeCodeModelClient(config);
+                }
+                opus = new OpusBrain(client, config.MaxCalls, Log);
                 opus.Called += (ctx, record) =>
                 {
                     if (runLog == null && ctx.Hello?.ProjectRoot != null)
@@ -78,7 +89,7 @@ namespace AgentPlay.Runner
                     runLog?.WriteCall(record);
                 };
                 brain = opus;
-                Log("opus brain: model " + config.Model + ", effort " + config.Effort + ", at most " + config.MaxCalls + " calls");
+                Log("opus brain: model " + config.Model + " via " + config.Backend + ", effort " + config.Effort + ", at most " + config.MaxCalls + " calls");
                 if (options.Smoke) return await Smoke(opus);
             }
 
