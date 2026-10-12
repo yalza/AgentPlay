@@ -51,6 +51,7 @@ namespace AgentPlay.Runner
 
             OpusBrain opus = null;
             RunLog runLog = null;
+            var telemetry = options.Brain != null ? new TelemetryRecorder() : null;
             if (options.Brain == "opus" || options.Smoke)
             {
                 var config = RunnerConfig.Load(Path.Combine(AppContext.BaseDirectory, "runner.json"));
@@ -81,6 +82,7 @@ namespace AgentPlay.Runner
                 opus = new OpusBrain(client, config.MaxCalls, Log);
                 opus.Called += (ctx, record) =>
                 {
+                    telemetry?.OnCall(record);
                     if (runLog == null && ctx.Hello?.ProjectRoot != null)
                     {
                         runLog = RunLog.Open(ctx.Hello.ProjectRoot, DateTime.Now);
@@ -97,7 +99,7 @@ namespace AgentPlay.Runner
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
             _ = Task.Run(() => ReadKeyboard(cts));
 
-            var session = new RunnerSession(options, Log);
+            var session = new RunnerSession(options, Log, telemetry);
             var idle = Stopwatch.StartNew();
             bool everConnected = false;
             Log("runner started; looking for Unity on " + options.Host + ":" + options.FirstPort + "-" + options.LastPort);
@@ -178,6 +180,13 @@ namespace AgentPlay.Runner
                     + ", cache write " + opus.CacheWriteTokens + "), output tokens " + opus.OutputTokens);
                 runLog?.WriteSummary(result, opus.Calls, opus.InputTokens, opus.OutputTokens, opus.CacheReadTokens, opus.CacheWriteTokens);
                 runLog?.Dispose();
+            }
+            if (telemetry != null && session.Hello?.ProjectRoot != null)
+            {
+                var report = telemetry.Build(session.GameResult ?? (session.Finished ? "stopped" : "unfinished"));
+                string telemetryPath = TelemetryRecorder.Write(session.Hello.ProjectRoot, DateTime.Now, report);
+                Log("telemetry: " + telemetryPath + " (model calls " + report.ModelCalls + ", important events " + report.ImportantEvents
+                    + ", handled by reflex " + report.HandledByReflex + ")");
             }
             return session.ExitCodeOnStop;
         }
