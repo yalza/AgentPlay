@@ -50,6 +50,13 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void SavingAnEmptyBookCreatesNoFile()
+        {
+            Assert.IsTrue(ReflexBook.Load(_root).Save());
+            Assert.IsFalse(File.Exists(Path.Combine(_root, "AgentPlay", "reflexes.json")), "games without reflexes get no reflexes.json");
+        }
+
+        [Test]
         public void InboxIsImportedOnceAndMovedAway()
         {
             WriteInbox("reflex-L1.json", R("R-L1"));

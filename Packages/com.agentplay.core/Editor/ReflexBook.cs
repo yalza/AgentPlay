@@ -51,6 +51,8 @@ namespace AgentPlay.Editor
         public bool Save()
         {
             if (LoadError != null) return false;
+            // A game that never had reflexes does not get an empty file.
+            if (File.Reflexes.Count == 0 && !System.IO.File.Exists(FilePath)) return true;
             AtomicFile.WriteAllText(FilePath, JsonConvert.SerializeObject(File, Formatting.Indented, ContractJson.Settings));
             return true;
         }
