@@ -36,6 +36,19 @@ namespace AgentPlay.InputDriving
 
         public void SetRightStick(Vector2 value) => _staged.rightStick = Vector2.ClampMagnitude(value, 1f);
 
+        /// <summary>
+        /// Raw stick value that reads back as <paramref name="output"/> after the gamepad's stick deadzone processor,
+        /// so small corrections (fine aiming) still move the game instead of falling inside the deadzone.
+        /// </summary>
+        public static Vector2 PastDeadzone(Vector2 output)
+        {
+            float magnitude = Mathf.Min(output.magnitude, 1f);
+            if (magnitude <= 0f) return Vector2.zero;
+            float min = InputSystem.settings.defaultDeadzoneMin;
+            float max = InputSystem.settings.defaultDeadzoneMax;
+            return output / output.magnitude * (min + magnitude * (max - min));
+        }
+
         public void SetRightTrigger(bool pressed) => _staged.rightTrigger = pressed ? 1f : 0f;
 
         public void SetButton(GamepadButton button, bool pressed) => _staged = _staged.WithButton(button, pressed);
