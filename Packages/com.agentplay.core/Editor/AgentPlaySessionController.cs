@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using AgentPlay.Contract;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -14,7 +15,9 @@ namespace AgentPlay.Editor
     [InitializeOnLoad]
     public static class AgentPlaySessionController
     {
-        const double SnapshotIntervalSeconds = 2.0;
+        const double DebugSnapshotSeconds = 2.0;
+        /// <summary>Play sessions are learned from, so their state is recorded more often.</summary>
+        const double PlaySnapshotSeconds = 0.5;
         const int SnapshotWarnBytes = 4096;
         const string Who = "human";   // M1: the agent does not play yet
 
@@ -25,6 +28,8 @@ namespace AgentPlay.Editor
         static UnityInstanceResolver _resolver;
         static AgentExecutorHost _executorHost;
         static bool _previousRunInBackground;
+        static ReflexMonitor _monitor;
+        static readonly Dictionary<string, Reflex> LoadedReflexes = new Dictionary<string, Reflex>();
         static readonly HashSet<string> Warned = new HashSet<string>();
         static readonly UnityHost Host = new UnityHost();
 
@@ -35,6 +40,8 @@ namespace AgentPlay.Editor
         public static int EventCount => _core?.EventCount ?? 0;
         public static IReadOnlyList<string> RecentEvents => _core?.RecentEvents ?? (IReadOnlyList<string>)Array.Empty<string>();
         public static string TracePath { get; private set; }
+        /// <summary>The reflex book of the running session (null when not playing).</summary>
+        public static ReflexBook Book { get; private set; }
         public static IReadOnlyList<string> RegistryErrors => _model?.Errors ?? (IReadOnlyList<string>)Array.Empty<string>();
 
         static AgentPlaySessionController()
@@ -72,13 +79,26 @@ namespace AgentPlay.Editor
             var hello = AgentRegistry.ToHello(_model, Application.productName);
             hello.ProjectRoot = projectRoot;
             hello.Brief = ReadBrief(projectRoot);
-            _trace.WriteHeader(hello.Game, hello.Version, Who, tag, DateTime.UtcNow);
+            hello.SessionTag = tag;
+            Book = ReflexBook.Load(projectRoot);
+            Book.ImportInbox();
+            var reflexes = Book.PrepareSession(hello, m => Debug.LogWarning("[AgentPlay] " + m));
+            LoadedReflexes.Clear();
+            foreach (var r in reflexes)
+            {
+                LoadedReflexes[r.Id] = r;
+                hello.Reflexes.Add(ReflexInfo.From(r));
+            }
+            _monitor = new ReflexMonitor(Book.File.Policy);
+            if (reflexes.Count > 0) Debug.Log("[AgentPlay] " + reflexes.Count + " reflex(es) active");
+            _trace.WriteHeader(hello.Game, hello.Version, Who, tag, DateTime.UtcNow, hello);
 
             _server = new BridgeServer();
             Host.Server = _server;
             var executor = new ExecutorCore(new ActionInvoker(_model, _resolver.Resolve), _model.SafeAction);
-            _executorHost = AgentExecutorHost.Create(executor, Snapshot, (outputs, important, names) => _core?.OnFrameEnd(outputs, important, names));
-            _core = new SessionCore(hello, Snapshot, Host, _trace, SnapshotIntervalSeconds, _executorHost);
+            _executorHost = AgentExecutorHost.Create(executor, Snapshot, OnFrame);
+            _executorHost.SetReflexes(reflexes);
+            _core = new SessionCore(hello, Snapshot, Host, _trace, tag == "play" ? PlaySnapshotSeconds : DebugSnapshotSeconds, _executorHost);
 
             if (_server.Start())
                 Debug.Log("[AgentPlay] Bridge listening on 127.0.0.1:" + _server.Port);
@@ -104,6 +124,10 @@ namespace AgentPlay.Editor
             Application.runInBackground = _previousRunInBackground;
             _server?.Dispose();
             _trace?.Dispose();
+            Book?.Save();   // reflex stats of this session; open evaluation windows are dropped
+            Book = null;
+            _monitor = null;
+            LoadedReflexes.Clear();
             _server = null;
             Host.Server = null;
             _trace = null;
@@ -119,9 +143,45 @@ namespace AgentPlay.Editor
             while (_server.TryReceive(out var line))
                 _core.OnLine(line);
             _core.Tick(EditorApplication.isPlaying && !EditorApplication.isPaused);
+            if (_monitor != null && EditorApplication.isPlaying) ApplyOutcomes(_monitor.Tick(Time.timeAsDouble));
         }
 
-        static void OnEvent(AgentEventRecord record) => _core?.OnEvent(record);
+        static void OnFrame(IReadOnlyList<ExecutorOutput> outputs, bool important, IReadOnlyList<string> names)
+        {
+            _core?.OnFrameEnd(outputs, important, names);
+            if (_monitor == null) return;
+            foreach (var o in outputs)
+            {
+                if (o.Kind == ExecutorOutputKinds.ReflexFired && LoadedReflexes.TryGetValue(o.ReflexId, out var r))
+                {
+                    ReflexLifecycle.RecordFired(r);
+                    _monitor.OnFired(o.ReflexId, Time.timeAsDouble);
+                }
+                else if (o.Kind == ExecutorOutputKinds.ReflexEnded && o.Reason != null && o.Reason.StartsWith("failed", StringComparison.Ordinal))
+                {
+                    _monitor.OnFailed(o.ReflexId);
+                }
+            }
+        }
+
+        static void ApplyOutcomes(List<ReflexOutcome> outcomes)
+        {
+            foreach (var o in outcomes)
+            {
+                if (!LoadedReflexes.TryGetValue(o.Id, out var r)) continue;
+                if (!ReflexLifecycle.RecordOutcome(r, o.Bad, Book.File.Policy)) continue;
+                Debug.LogWarning("[AgentPlay] Reflex " + r.Id + " suspended: " + r.Note);
+                _executorHost?.RemoveReflex(r.Id);
+                LoadedReflexes.Remove(r.Id);
+                Book.Save();
+            }
+        }
+
+        static void OnEvent(AgentEventRecord record)
+        {
+            if (record.Outcome == AgentOutcome.Bad) _monitor?.OnBadEvent();
+            _core?.OnEvent(record);
+        }
 
         static string ReadBrief(string projectRoot)
         {
