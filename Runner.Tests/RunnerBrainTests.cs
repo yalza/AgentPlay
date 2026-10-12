@@ -123,7 +123,7 @@ namespace AgentPlay.Runner.Tests
             s.Handle(Env(MessageTypes.Hello, Hello()));
             Assert.Empty(s.OnPlan(null));
             Assert.Equal(RunnerSession.ExitBrainStopped, s.ExitCode);
-            Assert.Contains("brain has no more plans", _printed);
+            Assert.Contains("brain stopped: no more plans", _printed);
         }
 
         [Theory]
