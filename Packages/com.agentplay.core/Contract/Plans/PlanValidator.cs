@@ -61,7 +61,7 @@ namespace AgentPlay.Contract
             return errors;
         }
 
-        static void CheckCondition(string at, string text, ConditionSchema schema, List<string> errors)
+        internal static void CheckCondition(string at, string text, ConditionSchema schema, List<string> errors)
         {
             CondNode node;
             try
@@ -76,16 +76,16 @@ namespace AgentPlay.Contract
             foreach (var error in schema.Check(node)) errors.Add(at + ": " + error);
         }
 
-        static void CheckAction(string at, string name, JObject args, Dictionary<string, ActionInfo> actions, List<string> errors)
+        internal static void CheckAction(string at, string name, JObject args, Dictionary<string, ActionInfo> actions, List<string> errors)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
-                errors.Add(at + ".do: required");
+                errors.Add(Join(at, "do") + ": required");
                 return;
             }
             if (!actions.TryGetValue(name, out var action))
             {
-                errors.Add(at + ".do: unknown action '" + name + "'");
+                errors.Add(Join(at, "do") + ": unknown action '" + name + "'");
                 return;
             }
             var known = new HashSet<string>();
@@ -95,15 +95,17 @@ namespace AgentPlay.Contract
                 var token = args?[p.Name];
                 if (token == null || token.Type == JTokenType.Null)
                 {
-                    errors.Add(at + ".args." + p.Name + ": required");
+                    errors.Add(Join(at, "args." + p.Name) + ": required");
                     continue;
                 }
-                if (!Matches(p.ValueType, token)) errors.Add(at + ".args." + p.Name + ": expected " + p.ValueType);
+                if (!Matches(p.ValueType, token)) errors.Add(Join(at, "args." + p.Name) + ": expected " + p.ValueType);
             }
             if (args != null)
                 foreach (var prop in args.Properties())
-                    if (!known.Contains(prop.Name)) errors.Add(at + ".args." + prop.Name + ": unknown parameter");
+                    if (!known.Contains(prop.Name)) errors.Add(Join(at, "args." + prop.Name) + ": unknown parameter");
         }
+
+        static string Join(string at, string field) => at.Length == 0 ? field : at + "." + field;
 
         static bool Matches(string kind, JToken token)
         {

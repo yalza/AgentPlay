@@ -12,6 +12,8 @@ namespace AgentPlay.Runner.Brains
         public string User;
         /// <summary>JSON schema the reply must follow (structured outputs).</summary>
         public JObject Schema;
+        /// <summary>Overrides the configured effort for this call (the reflector thinks harder than the brain); null keeps it.</summary>
+        public string Effort;
     }
 
     public sealed class ModelReply

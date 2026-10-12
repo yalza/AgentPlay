@@ -20,6 +20,47 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void ReflectorDefaultsAndOverrides()
+        {
+            var d = new RunnerConfig().Reflector;
+            Assert.Equal("high", d.Effort);
+            Assert.Equal(3, d.MinConfirmations);
+            Assert.Equal(60000, d.MaxDigestChars);
+            Assert.Equal(5, d.MaxTracesPerRun);
+            var path = Path.Combine(Path.GetTempPath(), "runner-" + Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(path, "{\"reflector\":{\"min_confirmations\":2}}");
+            try
+            {
+                var c = RunnerConfig.Load(path);
+                Assert.Equal(2, c.Reflector.MinConfirmations);
+                Assert.Equal("high", c.Reflector.Effort);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData("{\"reflector\":{\"effort\":\"huge\"}}")]
+        [InlineData("{\"reflector\":{\"min_confirmations\":0}}")]
+        [InlineData("{\"reflector\":{\"max_digest_chars\":10}}")]
+        [InlineData("{\"reflector\":{\"max_traces_per_run\":0}}")]
+        public void BadReflectorSettingsAreRejected(string json)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "runner-" + Guid.NewGuid().ToString("N") + ".json");
+            File.WriteAllText(path, json);
+            try
+            {
+                Assert.Throws<ArgumentException>(() => RunnerConfig.Load(path).Validate());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void FileOverridesDefaults()
         {
             var path = Path.Combine(Path.GetTempPath(), "runner-" + Guid.NewGuid().ToString("N") + ".json");

@@ -23,6 +23,13 @@ Testbed/*.sln
 /Demos/*/*.sln
 /Demos/*/AgentPlay/Traces/
 /Demos/*/AgentPlay/Runs/
+# Learning output of E2E runs (games decide themselves whether to commit theirs)
+/Demos/*/AgentPlay/Telemetry/
+/Demos/*/AgentPlay/Inbox/
+/Demos/*/AgentPlay/playbook.json
+/Demos/*/AgentPlay/playbook.md
+/Demos/*/AgentPlay/reflected.json
+/Demos/*/AgentPlay/reflexes.json
 
 # End-to-end logs for games outside this repo
 /.e2e/

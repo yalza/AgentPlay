@@ -37,7 +37,18 @@ namespace AgentPlay.Runner.Tests
             Assert.Equal("", args[args.IndexOf("--tools") + 1]);
             Assert.Contains("--strict-mcp-config", args);
             Assert.Contains("--no-session-persistence", args);
+            Assert.Contains("--safe-mode", args);
+            Assert.Equal("project", args[args.IndexOf("--setting-sources") + 1]);
             Assert.DoesNotContain("Paused because: mode", args);
+        }
+
+        [Fact]
+        public void RequestEffortOverridesTheConfig()
+        {
+            var request = Request();
+            request.Effort = "max";
+            var args = ClaudeCodeModelClient.BuildArguments(request, Config(), "C:/tmp/system.txt").ToList();
+            Assert.Equal("max", args[args.IndexOf("--effort") + 1]);
         }
 
         [Fact]

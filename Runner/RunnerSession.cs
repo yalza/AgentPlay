@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using AgentPlay.Contract;
 using AgentPlay.Runner.Brains;
+using AgentPlay.Runner.Learning;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -29,6 +30,8 @@ namespace AgentPlay.Runner
         readonly RunnerOptions _options;
         readonly Action<string> _print;
         readonly BrainContext _context = new BrainContext();
+        readonly TelemetryRecorder _telemetry;
+        readonly Func<HelloMessage, Playbook> _loadPlaybook;
         /// <summary>Game time of the pause the last plan answered; a repeat announcement of it is ignored.</summary>
         double? _answeredPauseT;
 
@@ -44,10 +47,12 @@ namespace AgentPlay.Runner
 
         bool BrainMode => _options.Brain != null;
 
-        public RunnerSession(RunnerOptions options, Action<string> print)
+        public RunnerSession(RunnerOptions options, Action<string> print, TelemetryRecorder telemetry = null, Func<HelloMessage, Playbook> loadPlaybook = null)
         {
+            _loadPlaybook = loadPlaybook;
             _options = options;
             _print = print;
+            _telemetry = telemetry;
         }
 
         public void Reset()
@@ -98,6 +103,7 @@ namespace AgentPlay.Runner
                 return new Outgoing[0];
             }
             _context.PlansSent++;
+            _telemetry?.OnPlanSent();
             _context.LastPlan = plan;
             _answeredPauseT = _context.PauseT;
             _context.RecentEvents.Clear();
@@ -118,6 +124,8 @@ namespace AgentPlay.Runner
                     Hello = env.As<HelloMessage>();
                     HasHello = true;
                     _context.Hello = Hello;
+                    _telemetry?.OnHello(Hello);
+                    _context.Playbook = _loadPlaybook?.Invoke(Hello);
                     PrintHello();
                     if (Hello.Protocol != ProtocolVersion.Current)
                     {
@@ -134,6 +142,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.Event:
                     var e = env.As<EventMessage>();
+                    _telemetry?.OnEvent(e);
                     _print("event t=" + Fmt(e.T) + " frame=" + e.Frame + " " + e.Name + (e.Important ? " (important)" : "") + " payload=" + Compact(e.Payload));
                     _context.RecentEvents.Add(e);
                     if (_context.RecentEvents.Count > MaxRecentEvents) _context.RecentEvents.RemoveAt(0);
@@ -143,6 +152,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.Paused:
                     var p = env.As<PausedMessage>();
+                    _telemetry?.OnPaused(p);
                     _print("paused t=" + Fmt(p.T) + " reason=" + p.Reason);
                     if (BrainMode)
                     {
@@ -177,12 +187,25 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.PlanStatus:
                     var s = env.As<PlanStatusMessage>();
+                    _telemetry?.OnPlanStatus(s);
                     _print("plan_status " + s.PlanId + " " + s.Status + " step=" + s.Step + " reason=" + s.Reason);
                     _context.PlanStatuses.Add(s);
                     if ((s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) && _context.LastPlan != null && s.PlanId == _context.LastPlan.Id)
                         _context.History.Add(_context.LastPlan.Id + ": " + _context.LastPlan.Intent + " -> " + s.Status
                             + (string.IsNullOrEmpty(s.Reason) ? "" : " (" + s.Reason + ")"));
                     if (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) _answeredPauseT = null;
+                    break;
+
+                case MessageTypes.Reflex:
+                    var rx = env.As<ReflexMessage>();
+                    _telemetry?.OnReflex(rx);
+                    _print("reflex " + rx.Id + " t=" + Fmt(rx.T) + (rx.HandledEvents != null && rx.HandledEvents.Count > 0 ? " handled " + string.Join(",", rx.HandledEvents) : ""));
+                    break;
+
+                case MessageTypes.ReflexEnd:
+                    var rxe = env.As<ReflexEndMessage>();
+                    _telemetry?.OnReflexEnd(rxe);
+                    _print("reflex_end " + rxe.Id + " t=" + Fmt(rxe.T) + " " + rxe.Status);
                     break;
 
                 case MessageTypes.Waiting:

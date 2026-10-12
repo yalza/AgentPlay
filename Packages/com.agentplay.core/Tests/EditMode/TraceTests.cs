@@ -19,6 +19,30 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void HeaderCarriesHello()
+        {
+            var sw = new StringWriter();
+            var w = new TraceWriter(sw);
+            w.WriteHeader("G", "v1", "human", "play", DateTime.UtcNow, new AgentPlay.Contract.HelloMessage { Game = "G", SessionTag = "play" });
+            var header = Lines(sw)[0];
+            Assert.AreEqual("G", (string)header["hello"]["game"]);
+            Assert.AreEqual("play", (string)header["hello"]["session_tag"]);
+        }
+
+        [Test]
+        public void ReflexLines()
+        {
+            var sw = new StringWriter();
+            var w = new TraceWriter(sw);
+            w.WriteReflex("R1", 2.5, new List<string> { "guard.spotted" });
+            w.WriteReflexEnd("R1", 3, "done");
+            var lines = Lines(sw);
+            Assert.AreEqual("reflex", (string)lines[0]["type"]);
+            Assert.AreEqual("guard.spotted", (string)lines[0]["handled_events"][0]);
+            Assert.AreEqual("done", (string)lines[1]["status"]);
+        }
+
+        [Test]
         public void WritesHeaderEventAndSnapshotAsOneJsonPerLine()
         {
             var sw = new StringWriter();

@@ -10,6 +10,7 @@ namespace HeistDemo
         public const float PickRange = 1.5f;
 
         public readonly List<string> Carried = new List<string>();
+        string _hideTarget;
         public bool Crouched { get; private set; }
 
         /// <summary>Point guards look at: head height standing, low when crouched.</summary>
@@ -60,6 +61,42 @@ namespace HeistDemo
             if (!MoveTowards(target)) return AgentActionStatus.Running;
             Crouched = true;
             return AgentActionStatus.Done;
+        }
+
+        [AgentAction("hide_nearest", "Walk to the nearest cover spot and crouch behind its box")]
+        public AgentActionStatus HideNearest(AgentActionContext ctx)
+        {
+            if (HeistGame.Result != null) return AgentActionStatus.Done;
+            if (ctx.IsFirstFrame)
+            {
+                Crouched = false;
+                _hideTarget = HeistLevel.NearestCover(transform.position);
+            }
+            if (!MoveTowards(HeistLevel.Zones[_hideTarget])) return AgentActionStatus.Running;
+            Crouched = true;
+            return AgentActionStatus.Done;
+        }
+
+        /// <summary>Human control (keyboard or the E2E pilot): one frame of walking in a direction on the floor.</summary>
+        public void ManualMove(Vector3 direction)
+        {
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 1e-6f) return;
+            Crouched = false;
+            var p = transform.position + direction.normalized * Speed * Time.deltaTime;
+            transform.position = new Vector3(Mathf.Clamp(p.x, -9.5f, 9.5f), p.y, Mathf.Clamp(p.z, -5.5f, 5.5f));
+        }
+
+        public void SetCrouched(bool crouched) => Crouched = crouched;
+
+        /// <summary>Human control: picks up the first item lying within reach.</summary>
+        public bool PickNearest()
+        {
+            if (HeistGame.Instance == null) return false;
+            foreach (var item in HeistGame.Instance.Items)
+                if (item.Value.activeSelf && HeistLevel.FlatDistance(transform.position, item.Value.transform.position) <= PickRange)
+                    return Pick(item.Key) == AgentActionStatus.Done;
+            return false;
         }
 
         [AgentAction("wait", "Stay still for the given number of seconds")]

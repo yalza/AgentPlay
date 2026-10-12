@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace HeistDemo
 {
-    [AgentGame("AgentPlay Heist", Version = "m2")]
+    [AgentGame("AgentPlay Heist", Version = "m3")]
     [AgentEventInfo("item.picked", "The thief picked up an item")]
     [AgentEventInfo("guard.spotted", "A guard started seeing the thief", Important = true, Outcome = AgentOutcome.Bad)]
     [AgentEventInfo("guard.lost_sight", "A guard stopped seeing the thief")]
@@ -67,6 +67,9 @@ namespace HeistDemo
             Visual(PrimitiveType.Cylinder, "Exit", HeistLevel.Zones["exit"], Color.green).transform.localScale = new Vector3(1.6f, 0.02f, 1.6f);
 
             Player = Visual(PrimitiveType.Capsule, "Thief", HeistLevel.Zones["start"] + Vector3.up, Color.blue).AddComponent<HeistPlayer>();
+            Player.gameObject.AddComponent<HeistKeyboard>();
+            // E2E stand-in for a human tester: drives the thief through the same controls as the keyboard.
+            if (System.Environment.GetEnvironmentVariable("AGENTPLAY_HEIST_PILOT") == "1") gameObject.AddComponent<HeistPilot>();
             GuardList.Add(Visual(PrimitiveType.Capsule, "Guard", HeistLevel.GuardRoute[0], Color.red).AddComponent<HeistGuard>());
         }
 

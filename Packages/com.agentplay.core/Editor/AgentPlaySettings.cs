@@ -25,5 +25,12 @@ namespace AgentPlay.Editor
             }
             set => EditorPrefs.SetString(Key("SessionTag"), value);
         }
+
+        /// <summary>Path to AgentPlay.Runner.dll (or its folder), used by the "Learn from play sessions" button.</summary>
+        public static string RunnerPath
+        {
+            get => EditorPrefs.GetString(Key("RunnerPath"), "");
+            set => EditorPrefs.SetString(Key("RunnerPath"), value ?? "");
+        }
     }
 }

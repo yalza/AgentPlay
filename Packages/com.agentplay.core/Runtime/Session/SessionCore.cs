@@ -103,7 +103,7 @@ namespace AgentPlay
         /// Called once per game frame after the executor ran; decides turn-based stops (spec M2 section 7).
         /// <paramref name="importantEvent"/> is true when the events the executor evaluated this frame included an important one.
         /// </summary>
-        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs, bool importantEvent)
+        public void OnFrameEnd(IReadOnlyList<ExecutorOutput> outputs, bool importantEvent, IReadOnlyList<string> importantEvents = null)
         {
             bool ended = false;
             bool ruleFired = false;
@@ -113,6 +113,20 @@ namespace AgentPlay
                 if (o.Kind == ExecutorOutputKinds.Waiting)
                 {
                     Send(MessageTypes.Waiting, new WaitingMessage { T = t });
+                    continue;
+                }
+                if (o.Kind == ExecutorOutputKinds.ReflexFired)
+                {
+                    var handled = importantEvents != null ? new List<string>(importantEvents) : new List<string>();
+                    _trace?.WriteReflex(o.ReflexId, t, handled);
+                    Send(MessageTypes.Reflex, new ReflexMessage { Id = o.ReflexId, T = t, Frame = _host.Frame, HandledEvents = handled });
+                    ruleFired = true;   // the frame was handled in-game: an important event does not pause it
+                    continue;
+                }
+                if (o.Kind == ExecutorOutputKinds.ReflexEnded)
+                {
+                    _trace?.WriteReflexEnd(o.ReflexId, t, o.Reason);
+                    Send(MessageTypes.ReflexEnd, new ReflexEndMessage { Id = o.ReflexId, T = t, Status = o.Reason });
                     continue;
                 }
                 var status = new PlanStatusMessage { PlanId = o.PlanId, Status = o.Kind, Step = o.Step, Reason = o.Reason };

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using AgentPlay.Contract;
 
@@ -8,7 +9,8 @@ namespace AgentPlay.Runner
     {
         public const string Usage =
             "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--backend claude-code|api] [--model M] [--effort E] [--max-calls N]] [--smoke] " +
-            "[--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS]";
+            "[--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS] [--no-reflect] [--reflector-smoke]\n" +
+            "       AgentPlay.Runner reflect --project <game project folder> [--trace <file>]... [--force]";
 
         public string Host = "127.0.0.1";
         public int FirstPort = 47800;
@@ -28,9 +30,19 @@ namespace AgentPlay.Runner
         public string Backend;
         /// <summary>Make one model call against a made-up game and exit.</summary>
         public bool Smoke;
+        /// <summary>Make one reflector call against a made-up session and exit.</summary>
+        public bool ReflectorSmoke;
+        /// <summary>null to play, "reflect" to learn from traces.</summary>
+        public string Command;
+        public string ProjectDir;
+        public List<string> Traces = new List<string>();
+        public bool Force;
+        /// <summary>Do not learn from this session even when its tag is play.</summary>
+        public bool NoReflect;
 
         public static RunnerOptions Parse(string[] args)
         {
+            if (args.Length > 0 && args[0] == "reflect") return ParseReflect(args);
             var o = new RunnerOptions();
             for (int i = 0; i < args.Length; i++)
             {
@@ -77,6 +89,12 @@ namespace AgentPlay.Runner
                     case "--smoke":
                         o.Smoke = true;
                         break;
+                    case "--reflector-smoke":
+                        o.ReflectorSmoke = true;
+                        break;
+                    case "--no-reflect":
+                        o.NoReflect = true;
+                        break;
                     case "--auto-resume":
                         o.AutoResume = true;
                         break;
@@ -106,6 +124,39 @@ namespace AgentPlay.Runner
                 if (o.AutoResume) throw new ArgumentException("--brain decides when to resume; drop --auto-resume");
                 o.Mode = Modes.TurnBased;
             }
+            return o;
+        }
+
+        static RunnerOptions ParseReflect(string[] args)
+        {
+            var o = new RunnerOptions { Command = "reflect" };
+            for (int i = 1; i < args.Length; i++)
+            {
+                string a = args[i];
+                switch (a)
+                {
+                    case "--project":
+                        o.ProjectDir = Value(args, ref i, a);
+                        break;
+                    case "--trace":
+                        o.Traces.Add(Value(args, ref i, a));
+                        break;
+                    case "--force":
+                        o.Force = true;
+                        break;
+                    case "--backend":
+                        o.Backend = Value(args, ref i, a);
+                        if (Array.IndexOf(RunnerConfig.Backends, o.Backend) < 0)
+                            throw new ArgumentException("--backend must be one of " + string.Join(", ", RunnerConfig.Backends));
+                        break;
+                    case "--model":
+                        o.Model = Value(args, ref i, a);
+                        break;
+                    default:
+                        throw new ArgumentException("Unknown argument for reflect: " + a);
+                }
+            }
+            if (string.IsNullOrWhiteSpace(o.ProjectDir)) throw new ArgumentException("reflect needs --project <game project folder>");
             return o;
         }
 

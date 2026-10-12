@@ -10,6 +10,8 @@ namespace AgentPlay
     {
         void Load(Plan plan);
         void Stop();
+        void SetReflexes(IReadOnlyList<Reflex> reflexes);
+        void RemoveReflex(string id);
     }
 
     /// <summary>
@@ -22,13 +24,14 @@ namespace AgentPlay
     {
         ExecutorCore _core;
         Func<JObject> _snapshot;
-        Action<IReadOnlyList<ExecutorOutput>, bool> _onFrame;
+        Action<IReadOnlyList<ExecutorOutput>, bool, IReadOnlyList<string>> _onFrame;
         HashSet<string> _collecting = new HashSet<string>();
         HashSet<string> _frameEvents = new HashSet<string>();
-        bool _collectingImportant;
+        List<string> _collectingImportant = new List<string>();
+        List<string> _frameImportant = new List<string>();
 
-        /// <param name="onFrame">Outputs of the frame, and whether the events it evaluated included an important one.</param>
-        public static AgentExecutorHost Create(ExecutorCore core, Func<JObject> snapshot, Action<IReadOnlyList<ExecutorOutput>, bool> onFrame)
+        /// <param name="onFrame">Outputs of the frame, whether the events it evaluated included an important one, and their names.</param>
+        public static AgentExecutorHost Create(ExecutorCore core, Func<JObject> snapshot, Action<IReadOnlyList<ExecutorOutput>, bool, IReadOnlyList<string>> onFrame)
         {
             var go = new GameObject("AgentPlay Executor") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(go);
@@ -43,7 +46,7 @@ namespace AgentPlay
         void OnEvent(AgentEventRecord record)
         {
             _collecting.Add(record.Name);
-            if (record.Important) _collectingImportant = true;
+            if (record.Important && !_collectingImportant.Contains(record.Name)) _collectingImportant.Add(record.Name);
         }
 
         void Update()
@@ -54,15 +57,21 @@ namespace AgentPlay
             _collecting = _frameEvents;
             _collecting.Clear();
             _frameEvents = events;
-            bool important = _collectingImportant;
-            _collectingImportant = false;
+            var important = _collectingImportant;
+            _collectingImportant = _frameImportant;
+            _collectingImportant.Clear();
+            _frameImportant = important;
             var outputs = _core.Tick(Time.deltaTime, _snapshot, _frameEvents);
-            _onFrame?.Invoke(outputs, important);
+            _onFrame?.Invoke(outputs, _frameImportant.Count > 0, _frameImportant);
         }
 
         public void Load(Plan plan) => _core?.Load(plan);
 
         public void Stop() => _core?.Stop();
+
+        public void SetReflexes(IReadOnlyList<Reflex> reflexes) => _core?.SetReflexes(reflexes);
+
+        public void RemoveReflex(string id) => _core?.RemoveReflex(id);
 
         public void Shutdown()
         {

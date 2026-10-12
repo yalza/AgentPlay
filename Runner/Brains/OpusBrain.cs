@@ -43,7 +43,7 @@ namespace AgentPlay.Runner.Brains
             if (!ReferenceEquals(_helloForPrompt, context.Hello))
             {
                 _helloForPrompt = context.Hello;
-                _system = PromptBuilder.BuildSystem(context.Hello);
+                _system = PromptBuilder.BuildSystem(context.Hello, context.Playbook);
                 _schema = PlanSchema.Build(context.Hello);
             }
             string turn = PromptBuilder.BuildTurn(context);
