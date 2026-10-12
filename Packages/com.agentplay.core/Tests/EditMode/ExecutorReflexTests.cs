@@ -134,6 +134,19 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void EdgeWhileTheReflexRunsDoesNotSkipTheCooldown()
+        {
+            _core.SetReflexes(new[] { R("R1", "event:spotted", "hide", cooldown: 1) });
+            _core.Load(WalkPlan());
+            _events.Add("spotted");
+            Assert.AreEqual("reflex_fired", Kinds(Tick()));
+            Tick();
+            _events.Add("spotted");                     // the guard spots the thief again while it is still hiding
+            Assert.AreEqual("reflex_ended", Kinds(Tick()));
+            Assert.AreEqual("", Kinds(Tick()), "the reflex must not fire again inside its cooldown");
+        }
+
+        [Test]
         public void FailingReflexDoesNotFailThePlan()
         {
             _runner.Behaviour["hide"] = _ => throw new InvalidOperationException("boom");

@@ -23,22 +23,33 @@ namespace AgentPlay.Editor
                 FilePath = Path.Combine(projectRoot, "AgentPlay", "reflexes.json"),
                 InboxDir = Path.Combine(projectRoot, "AgentPlay", "Inbox"),
             };
-            if (!System.IO.File.Exists(book.FilePath)) return book;
+            book.Read();
+            return book;
+        }
+
+        /// <summary>(Re)reads the file; a missing file is an empty book, an unreadable one sets LoadError.</summary>
+        void Read()
+        {
+            LoadError = null;
+            File = new ReflexFile();
+            if (!System.IO.File.Exists(FilePath)) return;
             try
             {
-                var file = JsonConvert.DeserializeObject<ReflexFile>(System.IO.File.ReadAllText(book.FilePath), ContractJson.Settings) ?? new ReflexFile();
+                var file = JsonConvert.DeserializeObject<ReflexFile>(System.IO.File.ReadAllText(FilePath), ContractJson.Settings) ?? new ReflexFile();
                 if (file.Reflexes == null) file.Reflexes = new List<Reflex>();
+                file.Reflexes.RemoveAll(r => r == null);   // hand-edited files
                 if (file.Policy == null) file.Policy = new ReflexPolicy();
                 foreach (var r in file.Reflexes)
+                {
                     if (r.Stats == null) r.Stats = new ReflexStats();
-                book.File = file;
+                    if (r.Args == null) r.Args = new Newtonsoft.Json.Linq.JObject();
+                }
+                File = file;
             }
             catch (Exception e) when (e is JsonException || e is IOException)
             {
-                book.File = new ReflexFile();
-                book.LoadError = "Cannot read " + book.FilePath + ": " + e.Message;
+                LoadError = "Cannot read " + FilePath + ": " + e.Message;
             }
-            return book;
         }
 
         public Reflex Find(string id)
@@ -128,8 +139,13 @@ namespace AgentPlay.Editor
 
         public bool Reenable(string id, string version) => Apply(id, r => ReflexLifecycle.Reenable(r, version));
 
+        /// <summary>
+        /// Review actions start from the file on disk: a Play session may have saved stats or suspensions since this
+        /// book was loaded, and an old copy must not overwrite them.
+        /// </summary>
         bool Apply(string id, Func<Reflex, bool> change)
         {
+            Read();
             var r = Find(id);
             if (r == null || !change(r)) return false;
             Save();

@@ -137,10 +137,42 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void ChangesStartFromTheFileOnDisk()
+        {
+            var setup = ReflexBook.Load(_root);
+            setup.File.Reflexes.Add(R("R-A", ReflexStatuses.Active));
+            setup.File.Reflexes.Add(R("R-B"));
+            setup.Save();
+            var window = ReflexBook.Load(_root);          // loaded before Play
+            var session = ReflexBook.Load(_root);         // Play mode suspends R-A and saves
+            session.Find("R-A").Status = ReflexStatuses.Suspended;
+            session.Find("R-A").Stats.Fired = 5;
+            session.Save();
+            Assert.IsTrue(window.Approve("R-B", "v1"));
+            var onDisk = ReflexBook.Load(_root);
+            Assert.AreEqual(ReflexStatuses.Suspended, onDisk.Find("R-A").Status, "the session's suspension survives");
+            Assert.AreEqual(5, onDisk.Find("R-A").Stats.Fired);
+            Assert.AreEqual(ReflexStatuses.Active, onDisk.Find("R-B").Status);
+            Assert.AreEqual(ReflexStatuses.Suspended, window.Find("R-A").Status, "the window now shows the fresh copy");
+        }
+
+        [Test]
+        public void NullEntriesAreDropped()
+        {
+            File.WriteAllText(Path.Combine(_root, "AgentPlay", "reflexes.json"),
+                "{\"version\":1,\"reflexes\":[null,{\"id\":\"R-L1\",\"when\":\"event:guard.spotted\",\"do\":\"hide_nearest\",\"status\":\"active\",\"game_version\":\"v1\",\"stats\":null}]}");
+            var book = ReflexBook.Load(_root);
+            Assert.IsNull(book.LoadError);
+            Assert.AreEqual(1, book.Reflexes.Count);
+            Assert.AreEqual(1, book.PrepareSession(Hello(), _ => { }).Count);
+        }
+
+        [Test]
         public void TransitionsSave()
         {
             var book = ReflexBook.Load(_root);
             book.File.Reflexes.Add(R("R-L1"));
+            book.Save();
             Assert.IsTrue(book.Approve("R-L1", "v3"));
             Assert.AreEqual("v3", ReflexBook.Load(_root).Find("R-L1").GameVersion);
             Assert.IsTrue(book.Disable("R-L1"));

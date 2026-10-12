@@ -192,8 +192,8 @@ namespace AgentPlay
             foreach (var slot in _reflexes)
             {
                 bool now = ConditionEvaluator.Evaluate(slot.When, context);
-                // An edge inside the cooldown is ignored, not queued.
-                if (now && !slot.WasTrue && _time >= slot.ReadyAt) slot.Pending = true;
+                // An edge while the reflex itself runs or inside its cooldown is ignored, not queued.
+                if (now && !slot.WasTrue && slot != _activeReflex && _time >= slot.ReadyAt) slot.Pending = true;
                 slot.WasTrue = now;
             }
         }
