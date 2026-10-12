@@ -54,15 +54,17 @@ namespace AgentPlay.Editor
                 _process.OutputDataReceived += (_, e) => Append(e.Data);
                 _process.ErrorDataReceived += (_, e) => Append(e.Data);
                 _process.Exited += (_, __) => OnExited();
+                // Set before Start: a runner that exits at once raises Exited before Start returns.
+                IsRunning = true;
                 _process.Start();
                 _process.StandardInput.Close();
                 _process.BeginOutputReadLine();
                 _process.BeginErrorReadLine();
-                IsRunning = true;
                 return null;
             }
             catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is InvalidOperationException || e is IOException)
             {
+                IsRunning = false;
                 return "Cannot start dotnet: " + e.Message;
             }
         }
@@ -111,6 +113,8 @@ namespace AgentPlay.Editor
 
         static void OnExited()
         {
+            // Exited can come before the last output lines; wait until the output streams are drained.
+            try { _process.WaitForExit(); } catch (InvalidOperationException) { }
             lock (LogLock)
             {
                 LastExitCode = _process.ExitCode;

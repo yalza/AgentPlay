@@ -139,14 +139,17 @@ namespace AgentPlay.Editor
                 EditorGUILayout.LabelField("when " + r.When + "  do " + r.Do + "(" + args + ")", EditorStyles.wordWrappedMiniLabel);
                 EditorGUILayout.LabelField("fired " + r.Stats.Fired + ", good " + r.Stats.Good + ", bad " + r.Stats.Bad
                     + (string.IsNullOrEmpty(r.Note) ? "" : "  (" + r.Note + ")"), EditorStyles.wordWrappedMiniLabel);
+                bool changed = false;
                 using (new EditorGUI.DisabledScope(playing))
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if ((r.Status == ReflexStatuses.Proposed || r.Status == ReflexStatuses.NeedsReview) && GUILayout.Button("Approve")) book.Approve(r.Id, GameVersion);
-                    if (r.Status == ReflexStatuses.Active && GUILayout.Button("Disable")) book.Disable(r.Id);
-                    if (r.Status == ReflexStatuses.Suspended && GUILayout.Button("Re-enable")) book.Reenable(r.Id, GameVersion);
-                    if (r.Status != ReflexStatuses.Rejected && r.Status != ReflexStatuses.Active && GUILayout.Button("Reject")) book.Reject(r.Id);
+                    if ((r.Status == ReflexStatuses.Proposed || r.Status == ReflexStatuses.NeedsReview) && GUILayout.Button("Approve")) changed = book.Approve(r.Id, GameVersion);
+                    if (r.Status == ReflexStatuses.Active && GUILayout.Button("Disable")) changed = book.Disable(r.Id);
+                    if (r.Status == ReflexStatuses.Suspended && GUILayout.Button("Re-enable")) changed = book.Reenable(r.Id, GameVersion);
+                    if (r.Status != ReflexStatuses.Rejected && r.Status != ReflexStatuses.Active && GUILayout.Button("Reject")) changed = book.Reject(r.Id);
                 }
+                // The reflex moved to another status group: stop this GUI pass so layout and repaint stay in step.
+                if (changed) GUIUtility.ExitGUI();
             }
         }
     }

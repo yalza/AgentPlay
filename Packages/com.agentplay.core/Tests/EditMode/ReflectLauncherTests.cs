@@ -45,5 +45,19 @@ namespace AgentPlay.Tests
             Assert.AreEqual(1, ReflectLauncher.CountPendingPlayTraces(root));
             Assert.AreEqual(0, ReflectLauncher.CountPendingPlayTraces(Path.Combine(root, "missing")));
         }
+
+        [Test]
+        public void RunnerThatExitsAtOnceIsReportedFinished()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "agentplay-badrunner-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(dir, "AgentPlay"));
+            File.WriteAllText(Path.Combine(dir, "AgentPlay.Runner.dll"), "not a dll");
+            Assert.IsNull(ReflectLauncher.Start(dir, dir));
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            while (ReflectLauncher.IsRunning && watch.Elapsed.TotalSeconds < 30) System.Threading.Thread.Sleep(50);
+            Assert.IsFalse(ReflectLauncher.IsRunning, "the launcher must notice the exit");
+            Assert.AreNotEqual(0, ReflectLauncher.LastExitCode);
+            Assert.IsNotEmpty(ReflectLauncher.LastSummary);
+        }
     }
 }
