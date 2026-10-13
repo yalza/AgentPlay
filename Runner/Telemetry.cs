@@ -57,6 +57,13 @@ namespace AgentPlay.Runner
             _report.PausesByReason[reason] = _report.PausesByReason.TryGetValue(reason, out var n) ? n + 1 : 1;
         }
 
+        public void OnAttention(AttentionMessage a)
+        {
+            Seen(a.T);
+            string reason = a.Reason ?? "unknown";
+            _report.PausesByReason[reason] = _report.PausesByReason.TryGetValue(reason, out var n) ? n + 1 : 1;
+        }
+
         public void OnReflex(ReflexMessage m)
         {
             Seen(m.T);

@@ -41,6 +41,12 @@ namespace AgentPlay.Runner
         /// <summary>"won" or "lost" once the game emitted game.won / game.lost.</summary>
         public string GameResult { get; private set; }
         public bool Finished { get; private set; }
+        public bool Realtime => _options.Mode == Modes.Realtime;
+        /// <summary>The plan that ended last (plan_done or plan_failed) and whether it succeeded.</summary>
+        public string LastEndedPlanId { get; private set; }
+        public bool LastEndedDone { get; private set; }
+        string _prefetchOpportunity;
+        bool _invalidated;
         public int ExitCode { get; private set; }
         /// <summary>Exit code when the runner stops: the result if the run finished, else 6 in brain mode (Unity went away).</summary>
         public int ExitCodeOnStop => Finished ? ExitCode : BrainMode ? ExitNotFinished : 0;
@@ -80,6 +86,25 @@ namespace AgentPlay.Runner
             return outgoing;
         }
 
+        /// <summary>The live context, without taking the pending decision.</summary>
+        public BrainContext PeekContext() => _context;
+
+        /// <summary>Plan id whose last step just started, once; null otherwise.</summary>
+        public string TakePrefetchOpportunity()
+        {
+            var id = _prefetchOpportunity;
+            _prefetchOpportunity = null;
+            return id;
+        }
+
+        /// <summary>True once after a surprise (important event attention, failed plan) that makes a look-ahead plan stale.</summary>
+        public bool TakeInvalidated()
+        {
+            bool was = _invalidated;
+            _invalidated = false;
+            return was;
+        }
+
         public BrainContext TakeDecisionContext()
         {
             DecisionPending = false;
@@ -109,6 +134,8 @@ namespace AgentPlay.Runner
             _context.RecentEvents.Clear();
             _context.PlanStatuses.Clear();
             _print("sent plan " + plan.Id + ": " + plan.Intent);
+            if (Realtime)
+                return new[] { new Outgoing { Type = MessageTypes.Plan, Body = new PlanMessage { Plan = plan }, DelayMs = _options.ThinkMs } };
             return new[]
             {
                 new Outgoing { Type = MessageTypes.Plan, Body = new PlanMessage { Plan = plan }, DelayMs = _options.ThinkMs },
@@ -150,30 +177,19 @@ namespace AgentPlay.Runner
                     else if (e.Name == ReservedEvents.GameLost) GameResult = "lost";
                     break;
 
+                case MessageTypes.Attention:
+                    var at = env.As<AttentionMessage>();
+                    _telemetry?.OnAttention(at);
+                    _print("attention t=" + Fmt(at.T) + " reason=" + at.Reason);
+                    if (at.Reason == "event") _invalidated = true;
+                    if (BrainMode) OnDecisionMessage(at.Reason, at.T, at.State);
+                    break;
+
                 case MessageTypes.Paused:
                     var p = env.As<PausedMessage>();
                     _telemetry?.OnPaused(p);
                     _print("paused t=" + Fmt(p.T) + " reason=" + p.Reason);
-                    if (BrainMode)
-                    {
-                        if (GameResult != null)
-                        {
-                            _print("game over: " + GameResult);
-                            Finish(GameResult == "won" ? ExitWon : ExitLost);
-                        }
-                        else if (_answeredPauseT == p.T)
-                        {
-                            // Unity announces a pause again on set_mode or reconnect; the plan already sent answers it.
-                            _print("(already answered this pause)");
-                        }
-                        else
-                        {
-                            _context.State = p.State;
-                            _context.PauseReason = p.Reason;
-                            _context.PauseT = p.T;
-                            DecisionPending = true;
-                        }
-                    }
+                    if (BrainMode) OnDecisionMessage(p.Reason, p.T, p.State);
                     else if (_options.AutoResume)
                     {
                         outgoing.Add(new Outgoing
@@ -188,6 +204,17 @@ namespace AgentPlay.Runner
                 case MessageTypes.PlanStatus:
                     var s = env.As<PlanStatusMessage>();
                     _telemetry?.OnPlanStatus(s);
+                    if (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed)
+                    {
+                        LastEndedPlanId = s.PlanId;
+                        LastEndedDone = s.Status == PlanStatuses.PlanDone;
+                        if (!LastEndedDone) _invalidated = true;
+                    }
+                    else if (s.Status == PlanStatuses.StepDone && _context.LastPlan != null && s.PlanId == _context.LastPlan.Id
+                             && s.Step == _context.LastPlan.Steps.Count - 2)
+                    {
+                        _prefetchOpportunity = s.PlanId;
+                    }
                     _print("plan_status " + s.PlanId + " " + s.Status + " step=" + s.Step + " reason=" + s.Reason);
                     _context.PlanStatuses.Add(s);
                     if ((s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed) && _context.LastPlan != null && s.PlanId == _context.LastPlan.Id)
@@ -224,6 +251,28 @@ namespace AgentPlay.Runner
                 default:
                     _print("unknown message '" + env.Type + "'");
                     break;
+            }
+        }
+
+        /// <summary>paused (turn-based) or attention (realtime): the game wants a decision.</summary>
+        void OnDecisionMessage(string reason, double t, JObject state)
+        {
+            if (GameResult != null)
+            {
+                _print("game over: " + GameResult);
+                Finish(GameResult == "won" ? ExitWon : ExitLost);
+            }
+            else if (_answeredPauseT == t)
+            {
+                // Unity announces a pause again on set_mode or reconnect; the plan already sent answers it.
+                _print("(already answered this pause)");
+            }
+            else
+            {
+                _context.State = state;
+                _context.PauseReason = reason;
+                _context.PauseT = t;
+                DecisionPending = true;
             }
         }
 

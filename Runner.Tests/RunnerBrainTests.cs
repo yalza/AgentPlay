@@ -51,7 +51,6 @@ namespace AgentPlay.Runner.Tests
         [InlineData("--brain manual", "Unknown brain")]
         [InlineData("--brain opus --effort huge", "effort")]
         [InlineData("--brain fancy", "Unknown brain")]
-        [InlineData("--brain script f.json --mode realtime", "turn_based")]
         [InlineData("--brain script f.json --auto-resume", "--auto-resume")]
         public void InvalidBrainOptions(string commandLine, string expected)
         {

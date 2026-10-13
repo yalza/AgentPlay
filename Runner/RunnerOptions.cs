@@ -9,7 +9,7 @@ namespace AgentPlay.Runner
     {
         public const string Usage =
             "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--backend claude-code|api] [--model M] [--effort E] [--max-calls N]] [--smoke] " +
-            "[--mode turn_based|realtime] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS] [--no-reflect] [--reflector-smoke]\n" +
+            "[--mode turn_based|realtime] [--router on|off] [--no-prefetch] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS] [--no-reflect] [--reflector-smoke]\n" +
             "       AgentPlay.Runner reflect --project <game project folder> [--trace <file>]... [--force]";
 
         public string Host = "127.0.0.1";
@@ -39,6 +39,11 @@ namespace AgentPlay.Runner
         public bool Force;
         /// <summary>Do not learn from this session even when its tag is play.</summary>
         public bool NoReflect;
+        /// <summary>Route quick reactions to the fast model (--router on|off).</summary>
+        public bool Router = true;
+        /// <summary>Ask for the next plan while the current one runs its last step (realtime, Opus brain only).</summary>
+        public bool Prefetch;
+        bool _noPrefetch;
 
         public static RunnerOptions Parse(string[] args)
         {
@@ -95,6 +100,14 @@ namespace AgentPlay.Runner
                     case "--no-reflect":
                         o.NoReflect = true;
                         break;
+                    case "--no-prefetch":
+                        o._noPrefetch = true;
+                        break;
+                    case "--router":
+                        var router = Value(args, ref i, a);
+                        if (router != "on" && router != "off") throw new ArgumentException("--router must be on or off");
+                        o.Router = router == "on";
+                        break;
                     case "--auto-resume":
                         o.AutoResume = true;
                         break;
@@ -120,9 +133,10 @@ namespace AgentPlay.Runner
             }
             if (o.Brain != null)
             {
-                if (o.Mode == Modes.Realtime) throw new ArgumentException("--brain plays in turn_based mode only");
                 if (o.AutoResume) throw new ArgumentException("--brain decides when to resume; drop --auto-resume");
-                o.Mode = Modes.TurnBased;
+                if (o.Mode == null) o.Mode = Modes.TurnBased;
+                // A script brain would hand out its next plan early, so only the model brain prefetches.
+                o.Prefetch = o.Brain == "opus" && o.Mode == Modes.Realtime && !o._noPrefetch;
             }
             return o;
         }

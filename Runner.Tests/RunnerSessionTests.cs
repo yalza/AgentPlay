@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using AgentPlay.Contract;
 using AgentPlay.Runner;
 using Newtonsoft.Json.Linq;
@@ -21,6 +22,84 @@ namespace AgentPlay.Runner.Tests
             h.Actions.Add(new ActionInfo { Name = "wait", Safe = true });
             h.Actions.Add(new ActionInfo { Name = "goto", Params = new List<ActionParamInfo> { new ActionParamInfo { Name = "zone", ValueType = "string" } } });
             return h;
+        }
+
+        static Plan TwoStepPlan(string id) => new Plan
+        {
+            Id = id,
+            Steps = new List<PlanStep> { new PlanStep { Do = "wait" }, new PlanStep { Do = "wait" } },
+            TimeoutSeconds = 10,
+        };
+
+        [Fact]
+        public void AttentionOpensADecisionWithoutResume()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            Assert.True(s.Realtime);
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1, State = new JObject() }));
+            Assert.True(s.DecisionPending);
+            Assert.Contains("attention t=1.00 reason=mode", _printed);
+            var ctx = s.TakeDecisionContext();
+            Assert.Equal("mode", ctx.PauseReason);
+            var outgoing = s.OnPlan(TwoStepPlan("p1"));
+            Assert.Equal(new[] { MessageTypes.Plan }, outgoing.Select(o => o.Type));
+        }
+
+        [Fact]
+        public void AttentionAfterGameOverFinishes()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Event, new EventMessage { Name = "game.won", Important = true }));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "event", T = 5 }));
+            Assert.True(s.Finished);
+            Assert.False(s.DecisionPending);
+            Assert.Equal(0, s.ExitCode);
+        }
+
+        [Fact]
+        public void LastStepOpensAPrefetchOpportunityAndSurprisesInvalidate()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1 }));
+            s.TakeDecisionContext();
+            s.OnPlan(TwoStepPlan("p1"));
+            Assert.Null(s.TakePrefetchOpportunity());
+            s.Handle(Env(MessageTypes.PlanStatus, new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.StepDone, Step = 0 }));
+            Assert.Equal("p1", s.TakePrefetchOpportunity());
+            Assert.Null(s.TakePrefetchOpportunity());
+            Assert.Equal("p1", s.PeekContext().LastPlan.Id);
+            Assert.False(s.TakeInvalidated());
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "event", T = 2 }));
+            Assert.True(s.TakeInvalidated());
+            Assert.False(s.TakeInvalidated());
+        }
+
+        [Fact]
+        public void EndedPlanIsTracked()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.PlanStatus, new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.PlanDone, Step = 2 }));
+            Assert.Equal("p1", s.LastEndedPlanId);
+            Assert.True(s.LastEndedDone);
+            s.Handle(Env(MessageTypes.PlanStatus, new PlanStatusMessage { PlanId = "p2", Status = PlanStatuses.PlanFailed, Step = 0, Reason = "timeout" }));
+            Assert.Equal("p2", s.LastEndedPlanId);
+            Assert.False(s.LastEndedDone);
+            Assert.True(s.TakeInvalidated(), "a failed plan invalidates any prefetch");
+        }
+
+        [Fact]
+        public void TurnBasedStillResumes()
+        {
+            var s = Session("--brain", "script", "x.json");
+            Assert.False(s.Realtime);
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 1 }));
+            s.TakeDecisionContext();
+            Assert.Equal(new[] { MessageTypes.Plan, MessageTypes.Resume }, s.OnPlan(TwoStepPlan("p1")).Select(o => o.Type));
         }
 
         [Fact]
