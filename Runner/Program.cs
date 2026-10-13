@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -64,6 +65,7 @@ namespace AgentPlay.Runner
             }
 
             OpusBrain opus = null;
+            ModelRouter router = null;
             RunLog runLog = null;
             var telemetry = options.Brain != null ? new TelemetryRecorder() : null;
             if (options.Brain == "opus" || options.Smoke)
@@ -71,6 +73,7 @@ namespace AgentPlay.Runner
                 var config = LoadConfig(options);
                 if (config == null) return 2;
                 opus = new OpusBrain(MakeClient(config), config.MaxCalls, Log);
+                if (options.Router) router = new ModelRouter(config);
                 opus.Called += (ctx, record) =>
                 {
                     telemetry?.OnCall(record);
@@ -126,27 +129,7 @@ namespace AgentPlay.Runner
 
                 try
                 {
-                    await foreach (var line in client.ReadLinesAsync(cts.Token))
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-                        Envelope env;
-                        try
-                        {
-                            env = MessageCodec.Decode(line);
-                        }
-                        catch (ProtocolException e)
-                        {
-                            Log("bad message from Unity: " + e.Message);
-                            continue;
-                        }
-                        foreach (var msg in session.Handle(env)) await Send(client, msg, cts.Token);
-                        if (session.DecisionPending && brain != null)
-                        {
-                            var plan = await brain.NextPlanAsync(session.TakeDecisionContext(), cts.Token);
-                            foreach (var msg in session.OnPlan(plan)) await Send(client, msg, cts.Token);
-                        }
-                        if (session.Finished) break;
-                    }
+                    await RunConnectionAsync(client, session, brain, router, options, telemetry, cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -187,6 +170,109 @@ namespace AgentPlay.Runner
                     await new Reflector(MakeClient(reflectConfig), reflectConfig, Log).RunAsync(session.Hello.ProjectRoot, null, false, CancellationToken.None);
             }
             return session.ExitCodeOnStop;
+        }
+
+        /// <summary>
+        /// One Unity connection: reads messages while brain calls run in the background, so the game can keep
+        /// running (realtime) and plans can be asked for ahead of time (spec M4a section 3).
+        /// </summary>
+        static async Task RunConnectionAsync(BridgeClient client, RunnerSession session, IBrain brain, ModelRouter router,
+            RunnerOptions options, TelemetryRecorder telemetry, CancellationToken ct)
+        {
+            var coordinator = new DecisionCoordinator(options.Prefetch && session.Realtime);
+            var calls = new Dictionary<Task<Plan>, (CallKind Kind, CancellationTokenSource Cts)>();
+            var lines = client.ReadLinesAsync(ct).GetAsyncEnumerator(ct);
+
+            async Task Execute(List<CoordinatorCommand> commands)
+            {
+                foreach (var cmd in commands)
+                {
+                    switch (cmd.Kind)
+                    {
+                        case CoordinatorCommand.Start:
+                            var callCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                            calls[brain.NextPlanAsync(cmd.Context, callCts.Token)] = (cmd.Call, callCts);
+                            break;
+                        case CoordinatorCommand.Send:
+                            if (session.Finished) break;
+                            if (cmd.FromPrefetch) Log("using the plan asked for ahead of time");
+                            foreach (var msg in session.OnPlan(cmd.Plan)) await Send(client, msg, ct);
+                            telemetry?.OnPlanSent(cmd.FromPrefetch);
+                            break;
+                        case CoordinatorCommand.CancelPrefetch:
+                            foreach (var entry in calls.Values)
+                                if (entry.Kind == CallKind.Prefetch) entry.Cts.Cancel();
+                            break;
+                    }
+                }
+                telemetry?.SetPrefetchCounts(coordinator.PrefetchRequested, coordinator.PrefetchUsed, coordinator.PrefetchDiscarded);
+            }
+
+            try
+            {
+                var read = lines.MoveNextAsync().AsTask();
+                while (!session.Finished)
+                {
+                    var waitOn = new List<Task>(calls.Keys) { read };
+                    var done = await Task.WhenAny(waitOn);
+                    if (done != read)
+                    {
+                        var task = (Task<Plan>)done;
+                        var (kind, callCts) = calls[task];
+                        calls.Remove(task);
+                        callCts.Dispose();
+                        if (task.IsCanceled) continue;
+                        await Execute(coordinator.OnCallCompleted(kind, await task));
+                        continue;
+                    }
+
+                    if (!await read) break;   // Unity closed the connection
+                    string line = lines.Current;
+                    read = lines.MoveNextAsync().AsTask();
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    Envelope env;
+                    try
+                    {
+                        env = MessageCodec.Decode(line);
+                    }
+                    catch (ProtocolException e)
+                    {
+                        Log("bad message from Unity: " + e.Message);
+                        continue;
+                    }
+                    foreach (var msg in session.Handle(env)) await Send(client, msg, ct);
+                    if (session.Finished || brain == null) continue;
+
+                    if (session.TakeInvalidated()) await Execute(coordinator.OnInvalidated());
+                    if (session.DecisionPending)
+                    {
+                        var ctx = session.TakeDecisionContext().Clone();
+                        if (router != null) ctx.Route = router.Route(ctx);
+                        telemetry?.OnDecisionStarted();
+                        await Execute(coordinator.OnDecisionNeeded(ctx, session.LastEndedPlanId, session.LastEndedDone));
+                    }
+                    string lastStepOf = session.TakePrefetchOpportunity();
+                    if (lastStepOf != null && session.Realtime)
+                    {
+                        var ahead = session.PeekContext().Clone();
+                        var current = ahead.LastPlan;
+                        ahead.State = session.LatestState ?? ahead.State;
+                        ahead.PauseT = session.LatestT;
+                        ahead.PauseReason = "prefetch";
+                        ahead.Route = router?.Prefetch();
+                        ahead.PrefetchNote = "Plan " + lastStepOf + " is on its last step (" + current.Steps[current.Steps.Count - 1].Do
+                            + "). Plan what to do after it finishes, assuming it succeeds.";
+                        await Execute(coordinator.OnPrefetchOpportunity(ahead, lastStepOf));
+                    }
+                }
+            }
+            finally
+            {
+                // Game over or Unity gone: no answer is needed any more; cancelling kills the CLI processes.
+                foreach (var entry in calls.Values) entry.Cts.Cancel();
+                // The reader is not disposed here: a read is still pending, and an async iterator cannot be disposed
+                // mid-read. The caller disposes the client, which closes the socket and ends that read.
+            }
         }
 
         /// <summary>runner.json next to the runner plus command-line overrides; null (after printing why) when invalid.</summary>

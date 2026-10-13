@@ -45,6 +45,9 @@ namespace AgentPlay.Runner
         /// <summary>The plan that ended last (plan_done or plan_failed) and whether it succeeded.</summary>
         public string LastEndedPlanId { get; private set; }
         public bool LastEndedDone { get; private set; }
+        /// <summary>Newest game state and time seen in any message (look-ahead requests use them).</summary>
+        public JObject LatestState { get; private set; }
+        public double LatestT { get; private set; }
         string _prefetchOpportunity;
         bool _invalidated;
         public int ExitCode { get; private set; }
@@ -169,6 +172,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.Event:
                     var e = env.As<EventMessage>();
+                    Latest(e.State, e.T);
                     _telemetry?.OnEvent(e);
                     _print("event t=" + Fmt(e.T) + " frame=" + e.Frame + " " + e.Name + (e.Important ? " (important)" : "") + " payload=" + Compact(e.Payload));
                     _context.RecentEvents.Add(e);
@@ -179,6 +183,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.Attention:
                     var at = env.As<AttentionMessage>();
+                    Latest(at.State, at.T);
                     _telemetry?.OnAttention(at);
                     _print("attention t=" + Fmt(at.T) + " reason=" + at.Reason);
                     if (at.Reason == "event") _invalidated = true;
@@ -187,6 +192,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.Paused:
                     var p = env.As<PausedMessage>();
+                    Latest(p.State, p.T);
                     _telemetry?.OnPaused(p);
                     _print("paused t=" + Fmt(p.T) + " reason=" + p.Reason);
                     if (BrainMode) OnDecisionMessage(p.Reason, p.T, p.State);
@@ -241,6 +247,7 @@ namespace AgentPlay.Runner
 
                 case MessageTypes.State:
                     var st = env.As<StateMessage>();
+                    Latest(st.State, st.T);
                     _print("state t=" + Fmt(st.T) + " " + Compact(st.State));
                     break;
 
@@ -252,6 +259,12 @@ namespace AgentPlay.Runner
                     _print("unknown message '" + env.Type + "'");
                     break;
             }
+        }
+
+        void Latest(JObject state, double t)
+        {
+            if (state != null) LatestState = state;
+            if (t > LatestT) LatestT = t;
         }
 
         /// <summary>paused (turn-based) or attention (realtime): the game wants a decision.</summary>

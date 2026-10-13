@@ -92,6 +92,19 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void LatestStateFollowsEveryMessageWithState()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1, State = new JObject { ["x"] = 1 } }));
+            s.Handle(Env(MessageTypes.Event, new EventMessage { Name = "e", T = 2, State = new JObject { ["x"] = 2 } }));
+            Assert.Equal(2, (int)s.LatestState["x"]);
+            Assert.Equal(2, s.LatestT);
+            s.Handle(Env(MessageTypes.State, new StateMessage { T = 3, State = new JObject { ["x"] = 3 } }));
+            Assert.Equal(3, (int)s.LatestState["x"]);
+        }
+
+        [Fact]
         public void TurnBasedStillResumes()
         {
             var s = Session("--brain", "script", "x.json");

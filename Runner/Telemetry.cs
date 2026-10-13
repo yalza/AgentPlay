@@ -79,6 +79,20 @@ namespace AgentPlay.Runner
 
         public void OnPlanSent() => _report.PlansSent++;
 
+        /// <summary>The runner started deciding (filled in by Task 5).</summary>
+        public void OnDecisionStarted()
+        {
+        }
+
+        /// <summary>A plan left the runner (filled in by Task 5).</summary>
+        public void OnPlanSent(bool fromPrefetch)
+        {
+        }
+
+        public void SetPrefetchCounts(int requested, int used, int discarded)
+        {
+        }
+
         public void OnPlanStatus(PlanStatusMessage s)
         {
             if (s.Status == PlanStatuses.PlanFailed) _report.PlansFailed++;
