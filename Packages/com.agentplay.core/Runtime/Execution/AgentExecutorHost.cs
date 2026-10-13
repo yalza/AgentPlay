@@ -12,6 +12,7 @@ namespace AgentPlay
         void Stop();
         void SetReflexes(IReadOnlyList<Reflex> reflexes);
         void RemoveReflex(string id);
+        TimeSplit TimeSplit { get; }
     }
 
     /// <summary>
@@ -72,6 +73,8 @@ namespace AgentPlay
         public void SetReflexes(IReadOnlyList<Reflex> reflexes) => _core?.SetReflexes(reflexes);
 
         public void RemoveReflex(string id) => _core?.RemoveReflex(id);
+
+        public TimeSplit TimeSplit => _core?.TimeSplit;
 
         public void Shutdown()
         {

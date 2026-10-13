@@ -78,6 +78,25 @@ namespace AgentPlay.Contract
         [JsonProperty("reason")] public string Reason;
         [JsonProperty("t")] public double T;
         [JsonProperty("state")] public JObject State;
+        [JsonProperty("time_split")] public TimeSplit TimeSplit;
+    }
+
+    /// <summary>Realtime mode: sent where turn-based mode would pause; the game keeps running its safe action.</summary>
+    public sealed class AttentionMessage
+    {
+        /// <summary>"mode", "event" or "plan".</summary>
+        [JsonProperty("reason")] public string Reason;
+        [JsonProperty("t")] public double T;
+        [JsonProperty("state")] public JObject State;
+        [JsonProperty("time_split")] public TimeSplit TimeSplit;
+    }
+
+    /// <summary>Game seconds since the agent took control, by what was running.</summary>
+    public sealed class TimeSplit
+    {
+        [JsonProperty("safe")] public double Safe;
+        [JsonProperty("plan")] public double Plan;
+        [JsonProperty("reflex")] public double Reflex;
     }
 
     public sealed class SetModeMessage

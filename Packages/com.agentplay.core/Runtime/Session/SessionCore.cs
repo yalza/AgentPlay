@@ -176,6 +176,7 @@ namespace AgentPlay
                         AwaitingResume = false;
                         _repauseOnResume = false;
                         _host.SetPaused(false);
+                        Pause(PauseReason.Mode);   // realtime: tells the runner to start
                     }
                     return;
 
@@ -257,6 +258,17 @@ namespace AgentPlay
 
         void Pause(PauseReason reason)
         {
+            if (_step.Mode == Modes.Realtime)
+            {
+                Send(MessageTypes.Attention, new AttentionMessage
+                {
+                    Reason = reason.ToString().ToLowerInvariant(),
+                    T = _host.GameTime,
+                    State = _snapshot(),
+                    TimeSplit = Split(),
+                });
+                return;
+            }
             if (AwaitingResume) return;
             AwaitingResume = true;
             _pauseReason = reason;
@@ -271,7 +283,14 @@ namespace AgentPlay
                 Reason = _pauseReason.ToString().ToLowerInvariant(),
                 T = _host.GameTime,
                 State = _snapshot(),
+                TimeSplit = Split(),
             });
+        }
+
+        TimeSplit Split()
+        {
+            var live = _executor?.TimeSplit;
+            return live == null ? new TimeSplit() : new TimeSplit { Safe = live.Safe, Plan = live.Plan, Reflex = live.Reflex };
         }
 
         void SendError(string message) => Send(MessageTypes.Error, new ErrorMessage { Message = message });

@@ -2,7 +2,7 @@ namespace AgentPlay.Contract
 {
     public static class ProtocolVersion
     {
-        public const int Current = 3;
+        public const int Current = 4;
     }
 
     public static class MessageTypes
@@ -17,6 +17,8 @@ namespace AgentPlay.Contract
         public const string Waiting = "waiting";
         public const string Reflex = "reflex";
         public const string ReflexEnd = "reflex_end";
+        /// <summary>Realtime mode: the game needs a decision but keeps running.</summary>
+        public const string Attention = "attention";
         // Runner -> Unity
         public const string SetMode = "set_mode";
         public const string Resume = "resume";
