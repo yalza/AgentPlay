@@ -67,7 +67,7 @@ namespace AgentPlay.Runner
             OpusBrain opus = null;
             ModelRouter router = null;
             RunLog runLog = null;
-            var telemetry = options.Brain != null ? new TelemetryRecorder() : null;
+            var telemetry = options.Brain != null ? new TelemetryRecorder { Mode = options.Mode } : null;
             if (options.Brain == "opus" || options.Smoke)
             {
                 var config = LoadConfig(options);

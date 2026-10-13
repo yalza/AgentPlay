@@ -77,5 +77,52 @@ namespace AgentPlay.Runner.Tests
             Assert.Equal(1, (int)r["important_events"]);
             Assert.Equal(1, (int)r["pauses_by_reason"]["event"]);
         }
+
+        [Fact]
+        public void CountsByModelRoleAndPrefetch()
+        {
+            var t = new TelemetryRecorder { Mode = "realtime" };
+            t.OnCall(new CallRecord { Model = "claude-haiku-5-5", Role = "fast", LatencyMs = 3000 });
+            t.OnCall(new CallRecord { Model = "claude-haiku-5-5", Role = "fast", LatencyMs = 5000 });
+            t.OnCall(new CallRecord { Model = "claude-opus-5-5", Role = "strategy", LatencyMs = 12000 });
+            t.OnCall(new CallRecord { Model = "claude-opus-5-5", Role = "prefetch", LatencyMs = 9000 });
+            t.SetPrefetchCounts(2, 1, 1);
+            var r = JObject.FromObject(t.Build("won"));
+            Assert.Equal("realtime", (string)r["mode"]);
+            Assert.Equal(2, (int)r["calls_by_model"]["claude-haiku-5-5"]["role"]["fast"]);
+            Assert.Equal(4000, (double)r["calls_by_model"]["claude-haiku-5-5"]["wait_ms"]["median"]);
+            Assert.Equal(1, (int)r["calls_by_model"]["claude-opus-5-5"]["role"]["prefetch"]);
+            Assert.Equal(2, (int)r["prefetch"]["requested"]);
+            Assert.Equal(1, (int)r["prefetch"]["used"]);
+            Assert.Equal(1, (int)r["prefetch"]["discarded"]);
+        }
+
+        [Fact]
+        public void TimeSplitFromTheLastAttention()
+        {
+            var t = new TelemetryRecorder();
+            t.OnAttention(new AttentionMessage { Reason = "plan", T = 5, TimeSplit = new TimeSplit { Safe = 1, Plan = 3, Reflex = 0 } });
+            t.OnPaused(new PausedMessage { Reason = "plan", T = 10, TimeSplit = new TimeSplit { Safe = 2, Plan = 6, Reflex = 2 } });
+            var r = JObject.FromObject(t.Build("won"));
+            Assert.Equal(6, (double)r["time_split"]["plan"]);
+            Assert.Equal(0.6, (double)r["time_split"]["plan_ratio"], 3);
+            Assert.Equal(0.2, (double)r["time_split"]["reflex_ratio"], 3);
+        }
+
+        [Fact]
+        public void DecisionWaitIsMeasured()
+        {
+            var now = new DateTime(2026, 1, 1, 0, 0, 0);
+            var t = new TelemetryRecorder(() => now);
+            t.OnDecisionStarted();
+            now = now.AddMilliseconds(4000);
+            t.OnPlanSent(false);
+            t.OnDecisionStarted();
+            now = now.AddMilliseconds(200);
+            t.OnPlanSent(true);
+            var r = JObject.FromObject(t.Build("won"));
+            Assert.Equal(2100, (double)r["decision_wait_ms"]["median"]);
+            Assert.Equal(200, (double)r["prefetch"]["used_wait_ms"][0]);
+        }
     }
 }
