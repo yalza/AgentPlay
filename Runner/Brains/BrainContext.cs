@@ -30,6 +30,8 @@ namespace AgentPlay.Runner.Brains
         public string StopReason;
         /// <summary>Extra instruction for a look-ahead request; null for a normal decision.</summary>
         public string PrefetchNote;
+        /// <summary>Model, effort and step limit for this call; null uses the configured model.</summary>
+        public RouteDecision Route;
 
         /// <summary>A copy for a call that runs while the session keeps receiving messages.</summary>
         public BrainContext Clone()

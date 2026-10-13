@@ -31,7 +31,7 @@ namespace AgentPlay.Runner.Brains
         {
             var parameters = new MessageCreateParams
             {
-                Model = _config.Model,
+                Model = request.Model ?? _config.Model,
                 MaxTokens = _config.MaxTokens,
                 Betas = [FallbackBeta],
                 Fallbacks = new BetaFallbacksParam(JsonSerializer.SerializeToElement("default")),

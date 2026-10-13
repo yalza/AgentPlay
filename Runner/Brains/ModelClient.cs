@@ -14,6 +14,8 @@ namespace AgentPlay.Runner.Brains
         public JObject Schema;
         /// <summary>Overrides the configured effort for this call (the reflector thinks harder than the brain); null keeps it.</summary>
         public string Effort;
+        /// <summary>Overrides the configured model for this call (the router picks it); null keeps it.</summary>
+        public string Model;
     }
 
     public sealed class ModelReply
@@ -55,6 +57,8 @@ namespace AgentPlay.Runner.Brains
         public long CacheWriteTokens;
         public string StopReason;
         public string PlanId;
+        /// <summary>"fast", "strategy" or "prefetch".</summary>
+        public string Role;
         public bool Valid;
         public string Error;
     }
