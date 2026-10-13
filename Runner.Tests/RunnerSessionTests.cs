@@ -66,6 +66,7 @@ namespace AgentPlay.Runner.Tests
             s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1 }));
             s.TakeDecisionContext();
             s.OnPlan(TwoStepPlan("p1"));
+            Assert.Equal("p1", s.TakePrefetchOpportunity());   // look ahead as soon as a plan starts
             Assert.Null(s.TakePrefetchOpportunity());
             s.Handle(Env(MessageTypes.PlanStatus, new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.StepDone, Step = 0 }));
             Assert.Equal("p1", s.TakePrefetchOpportunity());
@@ -113,6 +114,7 @@ namespace AgentPlay.Runner.Tests
             s.Handle(Env(MessageTypes.Paused, new PausedMessage { Reason = "mode", T = 1 }));
             s.TakeDecisionContext();
             Assert.Equal(new[] { MessageTypes.Plan, MessageTypes.Resume }, s.OnPlan(TwoStepPlan("p1")).Select(o => o.Type));
+            Assert.Null(s.TakePrefetchOpportunity());   // turn-based never looks ahead
         }
 
         [Fact]

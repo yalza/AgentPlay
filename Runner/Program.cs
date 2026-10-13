@@ -260,8 +260,8 @@ namespace AgentPlay.Runner
                         ahead.PauseT = session.LatestT;
                         ahead.PauseReason = "prefetch";
                         ahead.Route = router?.Prefetch();
-                        ahead.PrefetchNote = "Plan " + lastStepOf + " is on its last step (" + current.Steps[current.Steps.Count - 1].Do
-                            + "). Plan what to do after it finishes, assuming it succeeds.";
+                        ahead.PrefetchNote = "Plan " + lastStepOf + " (" + current.Intent + ") is running; its last step is "
+                            + current.Steps[current.Steps.Count - 1].Do + ". Plan what to do after it finishes, assuming it succeeds.";
                         await Execute(coordinator.OnPrefetchOpportunity(ahead, lastStepOf));
                     }
                 }

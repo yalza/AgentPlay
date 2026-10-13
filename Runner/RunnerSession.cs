@@ -137,6 +137,8 @@ namespace AgentPlay.Runner
             _context.RecentEvents.Clear();
             _context.PlanStatuses.Clear();
             _print("sent plan " + plan.Id + ": " + plan.Intent);
+            // Realtime: start looking ahead right away; a model answer takes longer than many plans' last step.
+            if (Realtime) _prefetchOpportunity = plan.Id;
             if (Realtime)
                 return new[] { new Outgoing { Type = MessageTypes.Plan, Body = new PlanMessage { Plan = plan }, DelayMs = _options.ThinkMs } };
             return new[]
