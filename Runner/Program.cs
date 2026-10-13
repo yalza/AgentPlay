@@ -208,6 +208,22 @@ namespace AgentPlay.Runner
                 telemetry?.SetPrefetchCounts(coordinator.PrefetchRequested, coordinator.PrefetchUsed, coordinator.PrefetchDiscarded);
             }
 
+            // A plan just sent or a plan entering its last step: ask for the next plan ahead of time.
+            async Task LookAhead()
+            {
+                string planId = session.TakePrefetchOpportunity();
+                if (planId == null || !session.Realtime || brain == null || session.Finished) return;
+                var ahead = session.PeekContext().Clone();
+                var current = ahead.LastPlan;
+                ahead.State = session.LatestState ?? ahead.State;
+                ahead.PauseT = session.LatestT;
+                ahead.PauseReason = "prefetch";
+                ahead.Route = router?.Prefetch();
+                ahead.PrefetchNote = "Plan " + planId + " (" + current.Intent + ") is running; its last step is "
+                    + current.Steps[current.Steps.Count - 1].Do + ". Plan what to do after it finishes, assuming it succeeds.";
+                await Execute(coordinator.OnPrefetchOpportunity(ahead, planId));
+            }
+
             try
             {
                 var read = lines.MoveNextAsync().AsTask();
@@ -223,6 +239,7 @@ namespace AgentPlay.Runner
                         callCts.Dispose();
                         if (task.IsCanceled) continue;
                         await Execute(coordinator.OnCallCompleted(kind, await task));
+                        await LookAhead();
                         continue;
                     }
 
@@ -251,19 +268,7 @@ namespace AgentPlay.Runner
                         telemetry?.OnDecisionStarted();
                         await Execute(coordinator.OnDecisionNeeded(ctx, session.LastEndedPlanId, session.LastEndedDone));
                     }
-                    string lastStepOf = session.TakePrefetchOpportunity();
-                    if (lastStepOf != null && session.Realtime)
-                    {
-                        var ahead = session.PeekContext().Clone();
-                        var current = ahead.LastPlan;
-                        ahead.State = session.LatestState ?? ahead.State;
-                        ahead.PauseT = session.LatestT;
-                        ahead.PauseReason = "prefetch";
-                        ahead.Route = router?.Prefetch();
-                        ahead.PrefetchNote = "Plan " + lastStepOf + " (" + current.Intent + ") is running; its last step is "
-                            + current.Steps[current.Steps.Count - 1].Do + ". Plan what to do after it finishes, assuming it succeeds.";
-                        await Execute(coordinator.OnPrefetchOpportunity(ahead, lastStepOf));
-                    }
+                    await LookAhead();
                 }
             }
             finally
