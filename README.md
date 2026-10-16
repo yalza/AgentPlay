@@ -72,6 +72,17 @@ Unity Editor (Play mode)                         Runner (.NET 9)
 
    Open **Window > AgentPlay** to see the connection, tag a session `play` (learn from it) or `debug`, and review proposed reflexes.
 
+## Adapting your game with Claude Code
+
+The `agentplay-adapt` skill writes the adapter for you. Make it available to Claude Code in your game project:
+
+```powershell
+setx AGENTPLAY_HOME E:\path\to\AgentPlay
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\agentplay-adapt" -Target "E:\path\to\AgentPlay\.claude\skills\agentplay-adapt"
+```
+
+Then, in your game project, ask Claude Code something like "use agentplay-adapt so the agent can finish the first 3 missions". It surveys the code, shows you what the agent will see and do, and after you approve writes a local-only adapter (excluded from git) and verifies it. Remove everything with `Tools/link-agentplay.ps1 -ProjectPath <game> -Unlink`.
+
 ### Runner options
 
 ```
