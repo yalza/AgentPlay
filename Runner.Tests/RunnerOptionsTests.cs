@@ -37,6 +37,23 @@ namespace AgentPlay.Runner.Tests
             Assert.Equal(15.0, o.IdleExitSeconds);
         }
 
+        [Fact]
+        public void ParsesCheck()
+        {
+            var o = RunnerOptions.Parse(new[] { "check", "--ports", "47850-47851", "--idle-exit", "12" });
+            Assert.Equal("check", o.Command);
+            Assert.Equal(47850, o.FirstPort);
+            Assert.Equal(47851, o.LastPort);
+            Assert.Equal(12.0, o.IdleExitSeconds);
+        }
+
+        [Fact]
+        public void CheckDefaultsToThirtySecondsAndRejectsBrain()
+        {
+            Assert.Equal(30.0, RunnerOptions.Parse(new[] { "check" }).IdleExitSeconds);
+            Assert.Throws<ArgumentException>(() => RunnerOptions.Parse(new[] { "check", "--brain", "opus" }));
+        }
+
         [Theory]
         [InlineData("--mode fast")]
         [InlineData("--think-ms -1")]

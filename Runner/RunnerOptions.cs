@@ -10,7 +10,8 @@ namespace AgentPlay.Runner
         public const string Usage =
             "Usage: AgentPlay.Runner [--brain script <file> | --brain opus [--backend claude-code|api] [--model M] [--effort E] [--max-calls N]] [--smoke] " +
             "[--mode turn_based|realtime] [--router on|off] [--no-prefetch] [--auto-resume] [--resume-seconds N] [--think-ms N] [--ports A-B] [--idle-exit SECONDS] [--no-reflect] [--reflector-smoke]\n" +
-            "       AgentPlay.Runner reflect --project <game project folder> [--trace <file>]... [--force]";
+            "       AgentPlay.Runner reflect --project <game project folder> [--trace <file>]... [--force]\n" +
+            "       AgentPlay.Runner check [--ports A-B] [--idle-exit SECONDS]";
 
         public string Host = "127.0.0.1";
         public int FirstPort = 47800;
@@ -48,6 +49,7 @@ namespace AgentPlay.Runner
         public static RunnerOptions Parse(string[] args)
         {
             if (args.Length > 0 && args[0] == "reflect") return ParseReflect(args);
+            if (args.Length > 0 && args[0] == "check") return ParseCheck(args);
             var o = new RunnerOptions();
             for (int i = 0; i < args.Length; i++)
             {
@@ -137,6 +139,31 @@ namespace AgentPlay.Runner
                 if (o.Mode == null) o.Mode = Modes.TurnBased;
                 // A script brain would hand out its next plan early, so only the model brain prefetches.
                 o.Prefetch = o.Brain == "opus" && o.Mode == Modes.Realtime && !o._noPrefetch;
+            }
+            return o;
+        }
+
+        static RunnerOptions ParseCheck(string[] args)
+        {
+            var o = new RunnerOptions { Command = "check", IdleExitSeconds = 30 };
+            for (int i = 1; i < args.Length; i++)
+            {
+                string a = args[i];
+                switch (a)
+                {
+                    case "--idle-exit":
+                        o.IdleExitSeconds = Number(Value(args, ref i, a), a);
+                        break;
+                    case "--ports":
+                        var parts = Value(args, ref i, a).Split('-');
+                        if (parts.Length != 2) throw new ArgumentException("--ports expects A-B");
+                        o.FirstPort = (int)Number(parts[0], a);
+                        o.LastPort = (int)Number(parts[1], a);
+                        if (o.FirstPort > o.LastPort) throw new ArgumentException("--ports: first port is greater than last port");
+                        break;
+                    default:
+                        throw new ArgumentException("Unknown argument for check: " + a);
+                }
             }
             return o;
         }
