@@ -348,7 +348,7 @@ Cấu hình mặc định ở `Runner/runner.json`: model chiến thuật, effor
 | Runner (chơi) | 0 thắng, 3 thua, 4 bộ não dừng (hết lượt gọi, lỗi model, hai Plan sai liên tiếp), 5 lệch giao thức, 6 phiên chưa kết thúc |
 | AutoPlay | 0 thắng, 1 hết giờ, 2 hook lỗi, 3 thua |
 | `check` | 0 đạt, 1 có mục hỏng, 6 không có game kết nối |
-| `reflect` | 0 xong, 5 đang có lần `reflect` khác chạy |
+| `reflect` | 0 xong, 2 dữ liệu vào hỏng (playbook hoặc ledger), 4 lỗi model, 5 đang có lần `reflect` khác chạy |
 
 ### File trong project game
 
