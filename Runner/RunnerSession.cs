@@ -108,6 +108,18 @@ namespace AgentPlay.Runner
             return was;
         }
 
+        /// <summary>
+        /// Readies a copied decision just before its call starts: routes it by the situation it was copied in, then
+        /// catches up with plans sent since (a queued decision was copied before the previous call's plan went out).
+        /// </summary>
+        public void PrepareCall(BrainContext ctx, ModelRouter router)
+        {
+            ctx.Route = router?.Route(ctx);
+            ctx.PlansSent = _context.PlansSent;
+            ctx.LastPlan = _context.LastPlan;
+            ctx.History = new List<string>(_context.History);
+        }
+
         public BrainContext TakeDecisionContext()
         {
             DecisionPending = false;

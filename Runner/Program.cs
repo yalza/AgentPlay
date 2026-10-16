@@ -182,7 +182,7 @@ namespace AgentPlay.Runner
             RunnerOptions options, TelemetryRecorder telemetry, CancellationToken ct)
         {
             var coordinator = new DecisionCoordinator(options.Prefetch && session.Realtime);
-            var calls = new Dictionary<Task<Plan>, (CallKind Kind, CancellationTokenSource Cts)>();
+            var calls = new Dictionary<Task<Plan>, (CallKind Kind, CancellationTokenSource Cts, BrainContext Context)>();
             var lines = client.ReadLinesAsync(ct).GetAsyncEnumerator(ct);
 
             async Task Execute(List<CoordinatorCommand> commands)
@@ -193,7 +193,8 @@ namespace AgentPlay.Runner
                     {
                         case CoordinatorCommand.Start:
                             var callCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                            calls[brain.NextPlanAsync(cmd.Context, callCts.Token)] = (cmd.Call, callCts);
+                            if (cmd.Call == CallKind.Decision) session.PrepareCall(cmd.Context, router);
+                            calls[brain.NextPlanAsync(cmd.Context, callCts.Token)] = (cmd.Call, callCts, cmd.Context);
                             break;
                         case CoordinatorCommand.Send:
                             if (session.Finished) break;
@@ -236,11 +237,16 @@ namespace AgentPlay.Runner
                     if (done != read)
                     {
                         var task = (Task<Plan>)done;
-                        var (kind, callCts) = calls[task];
+                        var (kind, callCts, callCtx) = calls[task];
                         calls.Remove(task);
+                        // A call the runner cancelled can still finish normally; its answer is stale either way.
+                        bool cancelled = callCts.IsCancellationRequested;
                         callCts.Dispose();
-                        if (task.IsCanceled) continue;
-                        await Execute(coordinator.OnCallCompleted(kind, await task));
+                        if (task.IsCanceled || cancelled) continue;
+                        var plan = await task;
+                        if (plan == null && kind == CallKind.Decision && callCtx.StopReason != null)
+                            session.PeekContext().StopReason = callCtx.StopReason;
+                        await Execute(coordinator.OnCallCompleted(kind, plan));
                         await LookAhead();
                         continue;
                     }
@@ -266,7 +272,6 @@ namespace AgentPlay.Runner
                     if (session.DecisionPending)
                     {
                         var ctx = session.TakeDecisionContext().Clone();
-                        if (router != null) ctx.Route = router.Route(ctx);
                         telemetry?.OnDecisionStarted();
                         await Execute(coordinator.OnDecisionNeeded(ctx, session.LastEndedPlanId, session.LastEndedDone));
                     }

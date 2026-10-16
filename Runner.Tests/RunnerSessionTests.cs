@@ -47,6 +47,38 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void QueuedDecisionCatchesUpWithThePlanSentMeanwhile()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1, State = new JObject() }));
+            var first = s.TakeDecisionContext().Clone();
+            // An important event while the first call runs: its decision is copied now and starts later.
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "event", T = 2, State = new JObject() }));
+            var queued = s.TakeDecisionContext().Clone();
+            var router = new AgentPlay.Runner.Brains.ModelRouter(new RunnerConfig { Model = "claude-opus-5-5", Effort = "high" });
+            s.PrepareCall(first, router);
+            s.OnPlan(TwoStepPlan("p1"));
+
+            s.PrepareCall(queued, router);
+            Assert.Equal(1, queued.PlansSent);           // its plan becomes p2, not a second p1
+            Assert.Equal("p1", queued.LastPlan.Id);
+            Assert.NotSame(s.PeekContext().History, queued.History);
+            Assert.Equal("strategy", queued.Route.Role);  // no plan was running when the event came
+        }
+
+        [Fact]
+        public void PrepareCallWithoutARouterLeavesTheRouteEmpty()
+        {
+            var s = Session("--brain", "script", "x.json", "--mode", "realtime");
+            s.Handle(Env(MessageTypes.Hello, Hello()));
+            s.Handle(Env(MessageTypes.Attention, new AttentionMessage { Reason = "mode", T = 1, State = new JObject() }));
+            var ctx = s.TakeDecisionContext().Clone();
+            s.PrepareCall(ctx, null);
+            Assert.Null(ctx.Route);
+        }
+
+        [Fact]
         public void AttentionAfterGameOverFinishes()
         {
             var s = Session("--brain", "script", "x.json", "--mode", "realtime");

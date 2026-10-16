@@ -50,7 +50,10 @@ namespace AgentPlay.Runner.Brains
             var router = _config.Router ?? new RouterConfig();
             if (!router.Enabled) return StrategyRoute();
             bool replanRule = ctx.PlanStatuses.Any(s => s.Status == PlanStatuses.PlanFailed && (s.Reason ?? "").StartsWith("replan:", StringComparison.Ordinal));
-            bool quick = ctx.PauseReason == "event" || (ctx.PauseReason == "plan" && replanRule);
+            // An event is a surprise for a running plan; with no plan yet, or after it ended, the strategy model answers.
+            bool planRunning = ctx.LastPlan != null && !ctx.PlanStatuses.Any(s => s.PlanId == ctx.LastPlan.Id
+                && (s.Status == PlanStatuses.PlanDone || s.Status == PlanStatuses.PlanFailed));
+            bool quick = (ctx.PauseReason == "event" && planRunning) || (ctx.PauseReason == "plan" && replanRule);
             if (!quick)
             {
                 _recentFast.Clear();

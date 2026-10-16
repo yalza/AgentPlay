@@ -8,11 +8,28 @@ namespace AgentPlay.Runner.Tests
     {
         static RunnerConfig Config() => new RunnerConfig { Model = "claude-opus-5-5", Effort = "high" };
 
+        /// <summary>A decision while plan p1 runs (or just failed with failedReason).</summary>
         static BrainContext Ctx(string reason, double t, string failedReason = null)
         {
-            var c = new BrainContext { PauseReason = reason, PauseT = t };
-            if (failedReason != null) c.PlanStatuses.Add(new PlanStatusMessage { Status = PlanStatuses.PlanFailed, Reason = failedReason });
+            var c = new BrainContext { PauseReason = reason, PauseT = t, LastPlan = new Plan { Id = "p1" } };
+            if (failedReason != null) c.PlanStatuses.Add(new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.PlanFailed, Reason = failedReason });
             return c;
+        }
+
+        [Fact]
+        public void EventWithNoPlanYetGoesToTheStrategyModel()
+        {
+            var c = Ctx("event", 5);
+            c.LastPlan = null;
+            Assert.Equal("strategy", new ModelRouter(Config()).Route(c).Role);
+        }
+
+        [Fact]
+        public void EventAfterThePlanEndedGoesToTheStrategyModel()
+        {
+            var c = Ctx("event", 5);
+            c.PlanStatuses.Add(new PlanStatusMessage { PlanId = "p1", Status = PlanStatuses.PlanDone });
+            Assert.Equal("strategy", new ModelRouter(Config()).Route(c).Role);
         }
 
         [Fact]
