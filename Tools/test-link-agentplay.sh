@@ -30,5 +30,45 @@ check '[ $? -ne 0 ]' "refuses a folder without Packages/manifest.json"
 
 cmd //c rmdir "$(cygpath -w "$PROJECT/Packages/com.agentplay.core")"
 check '[ -f "$ROOT/Packages/com.agentplay.core/package.json" ]' "real package untouched after unlinking"
+
+# --- LocalOnly / Unlink on a git repo ---
+REPO="$TMP/TeamGame"
+mkdir -p "$REPO/Packages" "$REPO/Assets"
+echo '{"dependencies":{}}' > "$REPO/Packages/manifest.json"
+printf 'Library/\n' > "$REPO/.gitignore"
+git -C "$REPO" init -q && git -C "$REPO" add -A && git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m init
+REPO_W="$(cygpath -w "$REPO")"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -LocalOnly
+check '[ $? -eq 0 ]' "local-only link succeeds"
+mkdir -p "$REPO/Assets/AgentPlayAdapter" && echo "// adapter" > "$REPO/Assets/AgentPlayAdapter/A.cs" && touch "$REPO/Assets/AgentPlayAdapter.meta"
+printf '# AgentPlay: local define, created by agentplay-adapt\n-define:AGENTPLAY\n' > "$REPO/Assets/csc.rsp"
+check '[ -z "$(git -C "$REPO" status --porcelain)" ]' "local-only leaves git status clean"
+check 'grep -q "^Library/$" "$REPO/.gitignore" && [ "$(wc -l < "$REPO/.gitignore")" -eq 1 ]' "local-only does not touch .gitignore"
+check '[ "$(grep -c "^# AgentPlay begin$" "$REPO/.git/info/exclude")" -eq 1 ]' "exclude block written once"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -LocalOnly
+check '[ "$(grep -c "^# AgentPlay begin$" "$REPO/.git/info/exclude")" -eq 1 ]' "second local-only link keeps one block"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -Unlink
+check '[ $? -eq 0 ]' "unlink succeeds"
+check '[ ! -e "$REPO/Packages/com.agentplay.core" ]' "unlink removes the junction"
+check '[ ! -e "$REPO/Assets/AgentPlayAdapter" ] && [ ! -e "$REPO/Assets/AgentPlayAdapter.meta" ]' "unlink removes the adapter"
+check '[ ! -e "$REPO/Assets/csc.rsp" ]' "unlink removes our csc.rsp"
+check '! grep -q -e "com.agentplay.core" -e "AgentPlayAdapter" -e "csc.rsp" "$REPO/.git/info/exclude"' "unlink removes the junction, adapter and csc.rsp lines"
+check '[ "$(grep -c "^/AgentPlay/$" "$REPO/.git/info/exclude")" -eq 1 ]' "unlink keeps AgentPlay/ excluded while it is kept"
+check '[ -d "$REPO/AgentPlay" ]' "unlink keeps AgentPlay/ without -Purge"
+check '[ -z "$(git -C "$REPO" status --porcelain)" ]' "git status clean after unlink"
+check '[ -f "$ROOT/Packages/com.agentplay.core/package.json" ]' "real package untouched after -Unlink"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -Unlink
+check '[ $? -eq 0 ] && [ -z "$(git -C "$REPO" status --porcelain)" ]' "unlink is idempotent"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -Unlink -Purge
+check '[ ! -e "$REPO/AgentPlay" ]' "purge removes AgentPlay/"
+check '! grep -q "AgentPlay" "$REPO/.git/info/exclude"' "purge removes the whole exclude block"
+
+# A csc.rsp that is not ours is never touched.
+printf -- '-nowarn:0618\n' > "$REPO/Assets/csc.rsp"
+git -C "$REPO" add -A && git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m rsp
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -LocalOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -Unlink
+check 'grep -q "nowarn" "$REPO/Assets/csc.rsp"' "foreign csc.rsp kept"
 rm -rf "$TMP"
 exit $fail
