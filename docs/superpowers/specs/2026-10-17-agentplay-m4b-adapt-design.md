@@ -108,7 +108,7 @@ Hai adapter đã chạy thật (Heist trong repo, TileThieves nhánh `feat/agent
 ### 3.2 `AgentPlay.Runner check`
 
 ```
-AgentPlay.Runner check [--ports A-B] [--idle-exit SECONDS] [--project <game project folder>]
+AgentPlay.Runner check [--ports A-B] [--idle-exit SECONDS]
 ```
 
 1. Kết nối như khi chơi, đọc `hello`.
@@ -144,7 +144,7 @@ AgentPlay.Runner check [--ports A-B] [--idle-exit SECONDS] [--project <game proj
 | | Mẫu asmdef | Mẫu `Assembly-CSharp` |
 | --- | --- | --- |
 | Khi nào | Code game nằm trong asmdef (TileThieves) | Code game không có asmdef (PetRPG) |
-| Vị trí | `Assets/<Game>AgentAdapter/` với asmdef riêng tham chiếu asmdef của game | `Assets/AgentPlayAdapter/` không có asmdef |
+| Vị trí | `Assets/AgentPlayAdapter/` với asmdef riêng tham chiếu asmdef của game | `Assets/AgentPlayAdapter/` không có asmdef |
 | Chỉ biên dịch khi có package | `defineConstraints` cộng `versionDefines` trên `com.agentplay.core` | Mọi file bọc trong `#if AGENTPLAY`; symbol đặt bằng `Assets/csc.rsp` (`-define:AGENTPLAY`), file này cũng chỉ trên máy |
 | Phần Editor (hook save) | Asmdef Editor riêng | Thư mục `Assets/AgentPlayAdapter/Editor/` |
 | Gỡ junction mà quên gỡ adapter | Asmdef bị loại, game biên dịch | `csc.rsp` vẫn còn thì lỗi biên dịch; `-Unlink` xóa cả hai cùng lúc. Nếu chỉ xóa `csc.rsp`, code bọc `#if` bị bỏ qua và game vẫn biên dịch |
@@ -176,9 +176,9 @@ Các điểm đã biết về PetRPG từ khảo sát sơ bộ (skill sẽ tự 
 
 - **Runner (`dotnet test`):** `check` được tách thành lớp thuần `AdapterCheck` nhận `hello` và hai snapshot, trả danh sách mục `PASS`/`FAIL`. Có test cho từng mục hỏng và cho trường hợp đạt. Phân tích tham số dòng lệnh của `check` có test trong `RunnerOptionsTests`.
 - **Unity (`Tools/unity-tests.sh`):** test EditMode cho phần quyết định của AutoPlay (thắng/thua/hết giờ ra mã nào, hook được gọi theo thứ tự, hook lỗi ra mã 2 và vẫn gọi `AfterPlay`), viết sao cho không cần vào Play mode thật.
-- **E2E không gọi model:** Heist chạy qua AutoPlay chung trong `e2e-m3-reflex` và `e2e-m4a-realtime`. Thêm `Tools/e2e-m4b-check.sh`: chạy `check` trên Heist, mong đợi mã 0; rồi chạy trên Testbed với một observe cố ý trả null, mong đợi mã 1.
+- **E2E không gọi model:** Heist chạy qua AutoPlay chung trong `e2e-m3-reflex` và `e2e-m4a-realtime`. Thêm `Tools/e2e-m4b-check.sh`: chạy `check` trên Heist, mong đợi mã 0. Các trường hợp hỏng (observe luôn null, thiếu `game.won`, không có action `Safe`) được phủ bằng test đơn vị của `AdapterCheck`, không bằng E2E, vì thêm observe hỏng vào Testbed sẽ làm đổi `hello` mà các verifier khác dựa vào.
 - **`link-agentplay.ps1`:** `Tools/test-link-agentplay.sh` có sẵn được mở rộng: trong một repo git tạm, `-LocalOnly` không làm đổi `git status`, và `-Unlink` trả repo về đúng trạng thái ban đầu.
-- **Skill:** kiểm bằng chính lần chạy trên PetRPG (mục 5). Trước đó, chạy thử skill một lần trên một bản sao Heist đã bỏ adapter, để bắt lỗi trong `SKILL.md` mà không tốn thời gian trên game lớn.
+- **Skill:** kiểm bằng chính lần chạy trên PetRPG (mục 5). Trước đó, chạy thử skill một lần trên một git worktree tách từ nhánh `main` của TileThieves (chưa có adapter; mẫu asmdef; mục tiêu "cạy đủ 6 viên gạch trong `Prototype_Pry`", đã biết là làm được), để bắt lỗi trong `SKILL.md` trên game nhỏ. Worktree nằm ngoài thư mục làm việc của người dùng và bị xóa sau khi chạy. Heist không dùng được cho việc này vì attribute của nó nằm ngay trong code game.
 
 ---
 
