@@ -138,6 +138,9 @@ Good plans are short (2 to 6 steps), use rules to react to danger, and use until
                 sb.Append("\nEarlier plans (oldest first):\n");
                 foreach (var h in history) sb.Append("- ").Append(h).Append('\n');
             }
+            if (!string.IsNullOrEmpty(context.PrefetchNote)) sb.Append("\n# Look ahead\n").Append(context.PrefetchNote).Append('\n');
+            if (context.Route != null && context.Route.MaxSteps > 0)
+                sb.Append("\nAnswer with a short plan of at most ").Append(context.Route.MaxSteps).Append(" steps.");
             sb.Append("\nAnswer with your next plan.");
             return sb.ToString();
         }

@@ -52,7 +52,14 @@ namespace AgentPlay.Runner.Brains
 
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var request = new ModelRequest { System = _system, User = feedback == null ? turn : turn + "\n\n" + feedback, Schema = _schema };
+                var request = new ModelRequest
+                {
+                    System = _system,
+                    User = feedback == null ? turn : turn + "\n\n" + feedback,
+                    Schema = _schema,
+                    Model = context.Route?.Model,
+                    Effort = context.Route?.Effort,
+                };
                 var reply = await CallWithRetry(request, context, ct);
                 if (reply == null) return null;
 
@@ -66,6 +73,7 @@ namespace AgentPlay.Runner.Brains
                     CacheReadTokens = reply.CacheReadTokens,
                     CacheWriteTokens = reply.CacheWriteTokens,
                     StopReason = reply.StopReason,
+                    Role = context.Route?.Role ?? RouteDecision.Strategy,
                 };
                 var plan = Parse(reply, context, out lastError);
                 record.Valid = plan != null;
@@ -104,6 +112,9 @@ namespace AgentPlay.Runner.Brains
                 return null;
             }
             var errors = PlanValidator.Validate(plan, context.Hello);
+            int maxSteps = context.Route?.MaxSteps ?? 0;
+            if (maxSteps > 0 && plan.Steps != null && plan.Steps.Count > maxSteps)
+                errors.Add("steps: at most " + maxSteps + " steps for a quick plan");
             if (errors.Count > 0)
             {
                 error = string.Join("; ", errors);

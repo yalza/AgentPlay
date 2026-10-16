@@ -52,6 +52,15 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void RequestModelOverridesTheConfig()
+        {
+            var request = Request();
+            request.Model = "claude-haiku-5-5";
+            var args = ClaudeCodeModelClient.BuildArguments(request, Config(), "C:/tmp/system.txt").ToList();
+            Assert.Equal("claude-haiku-5-5", args[args.IndexOf("--model") + 1]);
+        }
+
+        [Fact]
         public void SuccessfulOutputGivesTheStructuredPlanAndUsage()
         {
             var reply = ClaudeCodeModelClient.ParseOutput(Success, 4200);

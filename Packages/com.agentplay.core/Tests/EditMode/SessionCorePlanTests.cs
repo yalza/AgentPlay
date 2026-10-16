@@ -28,6 +28,7 @@ namespace AgentPlay.Tests
             public void Stop() => Stops++;
             public void SetReflexes(IReadOnlyList<Reflex> reflexes) { }
             public void RemoveReflex(string id) { }
+            public TimeSplit TimeSplit { get; } = new TimeSplit();
         }
 
         FakeHost _host;

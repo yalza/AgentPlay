@@ -184,6 +184,24 @@ namespace AgentPlay.Tests
         }
 
         [Test]
+        public void TimeSplitCountsSafePlanAndReflex()
+        {
+            _runner.Behaviour["hide"] = ctx => ctx.Elapsed >= 0.25 ? AgentActionStatus.Done : AgentActionStatus.Running;
+            _runner.Behaviour["once"] = ctx => ctx.Elapsed >= 0.15 ? AgentActionStatus.Done : AgentActionStatus.Running;
+            _core.SetReflexes(new[] { R("R1", "event:spotted", "hide") });
+            Tick();
+            Assert.AreEqual(0, _core.TimeSplit.Safe + _core.TimeSplit.Plan + _core.TimeSplit.Reflex, 1e-9, "nothing counts before control");
+            _core.Load(new Plan { Id = "p", Steps = new List<PlanStep> { new PlanStep { Do = "once" } }, TimeoutSeconds = 60 });
+            Tick(); Tick(); Tick();
+            Assert.AreEqual(0.3, _core.TimeSplit.Plan, 1e-9);
+            _events.Add("spotted");
+            Tick(); Tick(); Tick(); Tick();
+            Assert.AreEqual(0.4, _core.TimeSplit.Reflex, 1e-9);
+            Tick(); Tick();
+            Assert.AreEqual(0.2, _core.TimeSplit.Safe, 1e-9);
+        }
+
+        [Test]
         public void NoSnapshotWithoutPlanOrReflexes()
         {
             int snapshots = 0;

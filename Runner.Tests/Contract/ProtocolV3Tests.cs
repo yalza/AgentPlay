@@ -13,7 +13,7 @@ namespace AgentPlay.Runner.Tests.Contract
             string line = MessageCodec.Encode(MessageTypes.Hello, 1, hello);
             Assert.Contains("\"session_tag\":\"play\"", line);
             var back = MessageCodec.Decode(line).As<HelloMessage>();
-            Assert.Equal(3, back.Protocol);
+            Assert.Equal(ProtocolVersion.Current, back.Protocol);
             Assert.Equal("R-L1", back.Reflexes[0].Id);
         }
 

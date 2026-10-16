@@ -160,6 +160,49 @@ namespace AgentPlay.Runner.Tests
             Assert.Equal("model call failed " + OpusBrain.MaxFailuresInARow + " times in a row: down", ctx.StopReason);
         }
 
+        const string FourSteps = "{\"id\":\"x\",\"intent\":\"long\",\"steps\":[" +
+            "{\"do\":\"goto\",\"args\":{\"zone\":\"a\"},\"until\":\"\"},{\"do\":\"goto\",\"args\":{\"zone\":\"b\"},\"until\":\"\"}," +
+            "{\"do\":\"goto\",\"args\":{\"zone\":\"c\"},\"until\":\"\"},{\"do\":\"goto\",\"args\":{\"zone\":\"d\"},\"until\":\"\"}],\"rules\":[],\"timeout_s\":30}";
+
+        static RouteDecision Fast() => new RouteDecision { Role = "fast", Model = "claude-haiku-5-5", Effort = "low", MaxSteps = 3 };
+
+        [Fact]
+        public async Task QuickPlanTooLongIsRetried()
+        {
+            var client = new FakeClient();
+            client.Replies.Enqueue(_ => Reply(FourSteps));
+            client.Replies.Enqueue(_ => Reply(GoodPlan));
+            var ctx = Context();
+            ctx.Route = Fast();
+            var plan = await Brain(client).NextPlanAsync(ctx, CancellationToken.None);
+            Assert.NotNull(plan);
+            Assert.Equal(2, client.Requests.Count);
+            Assert.Contains("at most 3 steps", client.Requests[1].User);
+        }
+
+        [Fact]
+        public async Task RouteSetsModelEffortAndRole()
+        {
+            var client = new FakeClient();
+            client.Replies.Enqueue(_ => Reply(GoodPlan));
+            var ctx = Context();
+            ctx.Route = Fast();
+            await Brain(client).NextPlanAsync(ctx, CancellationToken.None);
+            Assert.Equal("claude-haiku-5-5", client.Requests[0].Model);
+            Assert.Equal("low", client.Requests[0].Effort);
+            Assert.Equal("fast", _calls[0].Role);
+        }
+
+        [Fact]
+        public async Task NoRouteKeepsTheConfiguredModel()
+        {
+            var client = new FakeClient();
+            client.Replies.Enqueue(_ => Reply(GoodPlan));
+            await Brain(client).NextPlanAsync(Context(), CancellationToken.None);
+            Assert.Null(client.Requests[0].Model);
+            Assert.Equal("strategy", _calls[0].Role);
+        }
+
         [Fact]
         public async Task SystemPromptIsBuiltOncePerGame()
         {

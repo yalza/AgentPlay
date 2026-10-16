@@ -75,6 +75,9 @@ namespace AgentPlay
 
         public bool ReflexRunning => _activeReflex != null;
 
+        /// <summary>Game seconds spent on the safe action, plans and reflexes since control was taken.</summary>
+        public TimeSplit TimeSplit { get; } = new TimeSplit();
+
         /// <summary>Replaces the reflexes. Each must already be validated; conditions are parsed here once.</summary>
         public void SetReflexes(IReadOnlyList<Reflex> reflexes)
         {
@@ -148,6 +151,7 @@ namespace AgentPlay
                     _planTime += deltaTime;
                     if (_planTime > _plan.TimeoutSeconds) End(outputs, PlanStatuses.PlanFailed, "timeout");
                 }
+                TimeSplit.Reflex += deltaTime;
                 RunReflex(deltaTime, outputs);
                 return outputs;
             }
@@ -158,6 +162,7 @@ namespace AgentPlay
                 return outputs;
             }
             _planTime += deltaTime;
+            TimeSplit.Plan += deltaTime;
             if (_planTime > _plan.TimeoutSeconds)
             {
                 End(outputs, PlanStatuses.PlanFailed, "timeout");
@@ -298,7 +303,9 @@ namespace AgentPlay
 
         void RunSafe(double deltaTime)
         {
-            if (!ControlTaken || _safeAction == null) return;
+            if (!ControlTaken) return;
+            TimeSplit.Safe += deltaTime;
+            if (_safeAction == null) return;
             if (TryRun(_safeAction, null, _safeContext, deltaTime, out var status, out _) && status != AgentActionStatus.Running)
                 Reset(_safeContext);
         }

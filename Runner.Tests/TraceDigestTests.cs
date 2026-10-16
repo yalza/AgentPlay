@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 using System.Linq;
 using AgentPlay.Contract;
 using AgentPlay.Runner.Learning;
@@ -133,5 +137,56 @@ namespace AgentPlay.Runner.Tests
             Assert.Null(d.Error);
             Assert.Contains("plan p plan_done", d.Text);
         }
+
+        /// <summary>A trace Unity still writes: the editor's StreamWriter shares the file for reading only.</summary>
+        static StreamWriter OpenLikeUnity(string path)
+        {
+            var w = new StreamWriter(path, false, new UTF8Encoding(false)) { AutoFlush = true };
+            w.WriteLine(Header());
+            return w;
+        }
+
+        [Fact]
+        public void HeaderOfATraceStillBeingWrittenCannotBeRead()
+        {
+            string dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ap-trace-" + Guid.NewGuid().ToString("N"))).FullName;
+            try
+            {
+                string path = Path.Combine(dir, "t.ndjson");
+                using (OpenLikeUnity(path)) Assert.Null(TraceDigest.ReadHeader(path));
+                Assert.Equal("play", (string)TraceDigest.ReadHeader(path)["tag"]);
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
+        [Fact]
+        public async Task WaitForTracesReturnsOnceTheWriterCloses()
+        {
+            string dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ap-trace-" + Guid.NewGuid().ToString("N"))).FullName;
+            try
+            {
+                var writer = OpenLikeUnity(Path.Combine(dir, "t.ndjson"));
+                var close = Task.Delay(300).ContinueWith(_ => writer.Dispose());
+                Assert.True(await TraceDigest.WaitForTracesAsync(dir, TimeSpan.FromSeconds(10)));
+                await close;
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
+        [Fact]
+        public async Task WaitForTracesGivesUpAtTheTimeout()
+        {
+            string dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ap-trace-" + Guid.NewGuid().ToString("N"))).FullName;
+            try
+            {
+                using (OpenLikeUnity(Path.Combine(dir, "t.ndjson")))
+                    Assert.False(await TraceDigest.WaitForTracesAsync(dir, TimeSpan.FromMilliseconds(400)));
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
+        [Fact]
+        public async Task WaitForTracesWithoutAFolderReturnsAtOnce() =>
+            Assert.True(await TraceDigest.WaitForTracesAsync(Path.Combine(Path.GetTempPath(), "ap-none-" + Guid.NewGuid().ToString("N")), TimeSpan.FromSeconds(5)));
     }
 }

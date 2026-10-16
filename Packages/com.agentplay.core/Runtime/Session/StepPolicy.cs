@@ -36,9 +36,9 @@ namespace AgentPlay
             _budgetEnd = maxGameSeconds > 0 ? gameTime + maxGameSeconds : double.PositiveInfinity;
         }
 
+        /// <summary>The reason in both modes: turn-based pauses on it, realtime sends attention.</summary>
         PauseReason Stop(PauseReason reason)
         {
-            if (Mode != Modes.TurnBased) return PauseReason.None;
             _budgetEnd = double.PositiveInfinity;
             return reason;
         }

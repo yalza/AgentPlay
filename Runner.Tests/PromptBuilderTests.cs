@@ -27,6 +27,17 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void TurnMentionsStepLimitAndLookAhead()
+        {
+            var ctx = new BrainContext { Hello = Hello(), PauseReason = "prefetch", Route = new RouteDecision { Role = "fast", MaxSteps = 3 }, PrefetchNote = "Plan p2 is on its last step (goto)." };
+            string turn = PromptBuilder.BuildTurn(ctx);
+            Assert.Contains("Answer with a short plan of at most 3 steps.", turn);
+            Assert.Contains("# Look ahead", turn);
+            Assert.Contains("Plan p2 is on its last step (goto).", turn);
+            Assert.DoesNotContain("# Look ahead", PromptBuilder.BuildTurn(new BrainContext { Hello = Hello(), PauseReason = "plan" }));
+        }
+
+        [Fact]
         public void SystemPromptListsPlaybookAndReflexes()
         {
             var hello = Hello();

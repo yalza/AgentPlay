@@ -39,7 +39,7 @@ namespace AgentPlay.Runner.Brains
         public static IReadOnlyList<string> BuildArguments(ModelRequest request, RunnerConfig config, string systemPromptFile) => new[]
         {
             "-p",
-            "--model", config.Model,
+            "--model", request.Model ?? config.Model,
             "--effort", request.Effort ?? config.Effort,
             "--output-format", "json",
             "--json-schema", request.Schema.ToString(Formatting.None),

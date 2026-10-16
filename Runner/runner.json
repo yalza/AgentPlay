@@ -9,5 +9,13 @@
     "min_confirmations": 3,
     "max_digest_chars": 60000,
     "max_traces_per_run": 5
+  },
+  "router": {
+    "enabled": true,
+    "fast_model": "claude-haiku-5-5",
+    "fast_effort": "low",
+    "fast_max_steps": 3,
+    "escalate_after": 2,
+    "escalate_window_s": 30
   }
 }

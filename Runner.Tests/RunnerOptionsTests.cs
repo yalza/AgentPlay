@@ -70,5 +70,31 @@ namespace AgentPlay.Runner.Tests
 
         [Fact]
         public void ReflectorSmokeFlag() => Assert.True(RunnerOptions.Parse(new[] { "--reflector-smoke" }).ReflectorSmoke);
+
+        [Fact]
+        public void RealtimeWithBrainIsAllowed()
+        {
+            var o = RunnerOptions.Parse(new[] { "--brain", "opus", "--mode", "realtime" });
+            Assert.Equal("realtime", o.Mode);
+            Assert.True(o.Prefetch);
+            Assert.True(o.Router);
+        }
+
+        [Fact]
+        public void BrainDefaultsToTurnBased() => Assert.Equal("turn_based", RunnerOptions.Parse(new[] { "--brain", "opus" }).Mode);
+
+        [Fact]
+        public void NoPrefetchAndRouterOff()
+        {
+            var o = RunnerOptions.Parse(new[] { "--brain", "opus", "--mode", "realtime", "--no-prefetch", "--router", "off" });
+            Assert.False(o.Prefetch);
+            Assert.False(o.Router);
+        }
+
+        [Fact]
+        public void ScriptBrainDoesNotPrefetch() => Assert.False(RunnerOptions.Parse(new[] { "--brain", "script", "x.json", "--mode", "realtime" }).Prefetch);
+
+        [Fact]
+        public void RouterValueIsChecked() => Assert.Throws<System.ArgumentException>(() => RunnerOptions.Parse(new[] { "--brain", "opus", "--router", "maybe" }));
     }
 }

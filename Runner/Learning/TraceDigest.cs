@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using AgentPlay.Contract;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -49,6 +50,37 @@ namespace AgentPlay.Runner.Learning
             {
             }
             return null;
+        }
+
+        /// <summary>
+        /// Waits until no trace in the folder is still open for writing. Unity closes the trace when Play mode ends,
+        /// a moment after game over, and until then the file cannot be read. False when one is still open at the timeout.
+        /// </summary>
+        public static async Task<bool> WaitForTracesAsync(string tracesDir, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (true)
+            {
+                if (!Directory.Exists(tracesDir) || Directory.GetFiles(tracesDir, "*.ndjson").All(CanRead)) return true;
+                if (DateTime.UtcNow >= deadline) return false;
+                await Task.Delay(100);
+            }
+        }
+
+        static bool CanRead(string path)
+        {
+            try
+            {
+                using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)) return true;
+            }
+            catch (FileNotFoundException)
+            {
+                return true;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                return false;
+            }
         }
 
         public static TraceDigestResult Build(IEnumerable<string> lines, int maxChars)
