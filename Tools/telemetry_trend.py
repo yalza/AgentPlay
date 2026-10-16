@@ -1,13 +1,15 @@
 """Shows how calls per game minute change across runner sessions (spec M4a section 6, criterion 5).
 
 Usage: telemetry_trend.py TELEMETRY_DIR [--last N]
-Exit 0 when the last session is lower than the first and the regression slope is negative,
-1 when not, 2 when there are fewer than two sessions.
+Only sessions that ended a game (won or lost) are counted; others (a model failure, a stop) are listed as skipped.
+Exit 0 when the last counted session is lower than the first and the regression slope is negative,
+1 when not, 2 when fewer than two sessions are counted.
 """
 import json
 import pathlib
 import sys
 
+COUNTED = ("won", "lost")
 
 def main(argv):
     if not argv:
@@ -27,11 +29,12 @@ def main(argv):
                      float(r.get("calls_per_game_minute", 0.0)), r.get("important_events_handled_by_reflex", 0)))
     print("%-20s %-10s %-9s %6s %10s %8s" % ("session", "mode", "result", "calls", "calls/min", "reflex"))
     for name, mode, result, calls, rate, reflex in rows:
-        print("%-20s %-10s %-9s %6d %10.2f %8d" % (name, mode, result, calls, rate, reflex))
-    if len(rows) < 2:
-        print("need at least two sessions")
+        note = "" if result in COUNTED else "  skipped"
+        print("%-20s %-10s %-9s %6d %10.2f %8d%s" % (name, mode, result, calls, rate, reflex, note))
+    ys = [r[4] for r in rows if r[2] in COUNTED]
+    if len(ys) < 2:
+        print("need at least two finished sessions")
         return 2
-    ys = [r[4] for r in rows]
     n = len(ys)
     mean_x = (n - 1) / 2.0
     mean_y = sum(ys) / n

@@ -26,6 +26,13 @@ for i in $(seq 1 "$RUNS"); do
     -executeMethod HeistDemo.HeistAutoPlay.Run -logFile "$(cygpath -m "$LOGS/autoplay-$i.log")"
   UNITY_CODE=$?
   wait "$RUNNER_PID"
-  echo "session $i: runner=$? unity=$UNITY_CODE; $(grep -h 'reflect done' "$LOGS/session-$i.log")"
+  RUNNER_CODE=$?
+  echo "session $i: runner=$RUNNER_CODE unity=$UNITY_CODE; $(grep -h 'reflect done' "$LOGS/session-$i.log")"
+  # Criterion 5 needs consecutive sessions; a model failure (exit 4, e.g. a usage limit) or a failed reflect breaks the chain.
+  FAILED="$(grep -h 'model call failed' "$LOGS/session-$i.log" | head -1)"
+  if [ "$RUNNER_CODE" = 4 ] || [ -n "$FAILED" ]; then
+    echo "session $i: model failure, batch stopped: $FAILED"
+    exit 4
+  fi
 done
 python -I "$ROOT/Tools/telemetry_trend.py" "$AP/Telemetry"
