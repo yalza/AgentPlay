@@ -17,6 +17,38 @@ namespace AgentPlay.Tests
             public void AfterPlay() { _calls.Add(_name + ".after"); if (FailAfter) throw new InvalidOperationException("y"); }
         }
 
+        public sealed class DefaultHook : IAgentAutoPlayHook
+        {
+            public void BeforePlay() { }
+            public void AfterPlay() { }
+        }
+
+        abstract class AbstractHook : IAgentAutoPlayHook
+        {
+            public void BeforePlay() { }
+            public void AfterPlay() { }
+        }
+
+        [Test]
+        public void DiscoverKeepsOnlyConcreteHooksWithADefaultConstructor()
+        {
+            var found = AutoPlayHooks.Discover(new[] { typeof(Hook), typeof(DefaultHook), typeof(AbstractHook), typeof(IAgentAutoPlayHook) }, _ => false);
+            CollectionAssert.AreEqual(new[] { typeof(DefaultHook) }, found);
+        }
+
+        [Test]
+        public void DiscoverSkipsTypesTheFilterRejects()
+        {
+            CollectionAssert.IsEmpty(AutoPlayHooks.Discover(new[] { typeof(DefaultHook) }, t => t == typeof(DefaultHook)));
+        }
+
+        [Test]
+        public void TestAssembliesAreRecognised()
+        {
+            Assert.IsTrue(AutoPlayHooks.IsTestAssembly(typeof(AutoPlayHooksTests).Assembly));
+            Assert.IsFalse(AutoPlayHooks.IsTestAssembly(typeof(AutoPlayHooks).Assembly));
+        }
+
         [Test]
         public void RunsBeforeInOrderAndAfterInReverse()
         {

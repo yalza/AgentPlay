@@ -37,15 +37,27 @@ namespace AgentPlay.Editor
 
         public static void Run()
         {
+            try
+            {
+                Start();
+            }
+            catch (Exception e)
+            {
+                // Never leave the Editor open and waiting: a batch run would hang until someone kills it.
+                Debug.LogError("[AgentPlay] AutoPlay could not start: " + e);
+                Finish(AutoPlayRules.ExitHookFailed);
+            }
+        }
+
+        static void Start()
+        {
             if (!int.TryParse(Environment.GetEnvironmentVariable("AGENTPLAY_AUTOPLAY_SECONDS"), out var seconds) || seconds <= 0) seconds = 240;
             SessionState.EraseString(ResultKey);
             SessionState.EraseFloat(EndedKey);
             SessionState.EraseInt(QuitKey);
             AgentPlaySettings.SessionTag = Environment.GetEnvironmentVariable("AGENTPLAY_SESSION_TAG") == "play" ? "play" : "debug";
 
-            var hooks = TypeCache.GetTypesDerivedFrom<IAgentAutoPlayHook>()
-                .Where(t => !t.IsAbstract && !t.IsInterface)
-                .OrderBy(t => t.FullName, StringComparer.Ordinal)
+            var hooks = AutoPlayHooks.Discover(TypeCache.GetTypesDerivedFrom<IAgentAutoPlayHook>(), t => AutoPlayHooks.IsTestAssembly(t.Assembly))
                 .Select(t => (IAgentAutoPlayHook)Activator.CreateInstance(t))
                 .ToList();
             bool ok = AutoPlayHooks.Before(hooks, Debug.LogError, out var started);
