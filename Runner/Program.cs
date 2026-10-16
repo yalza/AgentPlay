@@ -165,6 +165,8 @@ namespace AgentPlay.Runner
             if (brain != null && !options.NoReflect && session.Hello?.SessionTag == "play" && session.Hello.ProjectRoot != null)
             {
                 Log("session tag is play: learning from it");
+                if (!await TraceDigest.WaitForTracesAsync(Path.Combine(session.Hello.ProjectRoot, "AgentPlay", "Traces"), TimeSpan.FromSeconds(30)))
+                    Log("WARNING: a trace is still being written after 30 s; it is left for the next reflect");
                 var reflectConfig = LoadConfig(options);
                 if (reflectConfig != null)
                     await new Reflector(MakeClient(reflectConfig), reflectConfig, Log).RunAsync(session.Hello.ProjectRoot, null, false, CancellationToken.None);
