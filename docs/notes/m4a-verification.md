@@ -3,12 +3,12 @@
 Ngày chạy: 2026-10-13 và 2026-10-17 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315, Claude Code CLI đăng nhập bằng gói Claude; model chiến thuật `claude-opus-5-5`, model nhanh `claude-haiku-5-5`)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 339/339 passed
-- `Tools/unity-tests.sh`: 146/146 passed
+- `dotnet test AgentPlay.sln`: 343/343 passed (sau vòng sửa theo review)
+- `Tools/unity-tests.sh`: 146/146 passed (sau vòng sửa theo review)
 - `Tools/check-generic.sh`: OK
 - `python -I Tools/test_telemetry_trend.py`: passed
 - `Tools/e2e-m4a-realtime.sh` (không gọi model): ALL CHECKS PASSED
-- Hồi quy: `Tools/e2e-m2a.sh`, `Tools/e2e-m3-reflex.sh` và `Tools/e2e-m2c.sh script` đều ALL CHECKS PASSED. `e2e-m3-reflex` vẫn chạy ở chế độ `turn_based`, tức chế độ theo lượt vẫn là mặc định.
+- Hồi quy: `Tools/e2e-m2a.sh`, `Tools/e2e-m3-reflex.sh` và `Tools/e2e-m2c.sh script` đều ALL CHECKS PASSED, cả trước và sau vòng sửa theo review. `e2e-m3-reflex` vẫn chạy ở chế độ `turn_based`, tức chế độ theo lượt vẫn là mặc định.
 
 ## Định nghĩa "xong" của spec M4a
 
@@ -52,6 +52,17 @@ Ngày chạy: 2026-10-13 và 2026-10-17 (Windows 11, Unity 6000.0.77f1, .NET SDK
 - **Ván thua ngày 2026-10-13 (loạt 3, ván 3)** không phải lỗi: lượt Haiku được khởi động ở t=20,53, nhưng ván thua 2,6 giây sau, trước khi Haiku kịp trả lời. Run log ghi 4 lượt đã khởi động, trong đó 2 lượt bị hủy khi ván kết thúc.
 - **Haiku chậm hơn số đo ban đầu:** lượt nhanh thật mất 7,8–10,2 giây, so với 3,2 giây đo được trong spec. Trong Heist, cách phản ứng nhanh duy nhất chắc chắn kịp vẫn là phản xạ.
 - **Môi trường:** một lần ổ C: đầy (0 GB trống) làm Unity mất 13 phút mới thoát và hỏng loạt chạy. Loạt đó bị bỏ và chạy lại sau khi dọn ổ.
+
+## Review độc lập
+Một reviewer có ngữ cảnh mới (Opus, chỉ đọc code) kết luận "merge được sau khi sửa": 0 lỗi nghiêm trọng, 4 lỗi quan trọng, 9 lỗi nhỏ. Năm tình huống trong Review Focus của plan đều đạt.
+
+Đã sửa ở `3dba2be`, có test fail trước khi sửa:
+- **Hai Plan khác nhau cùng một id.** Một quyết định xếp hàng sau lượt gọi đang chạy được chép trước khi Plan của lượt đó được gửi, nên cũng nhận id `p2`. Giờ bản chép cập nhật `PlansSent`, `LastPlan` và `History` ngay trước khi lượt gọi của nó bắt đầu.
+- **Router đếm theo `attention`, không theo lượt gọi.** Các quyết định bị gộp hoặc được Plan xin trước trả lời vẫn làm đổi bộ đếm leo thang. Giờ router chỉ chạy khi một lượt quyết định thật sự bắt đầu.
+- **Sự kiện đi sang Haiku cả khi chưa có Plan nào chạy.** Spec chỉ cho phép khi "đang có Plan". Ruling: việc "đang có Plan" được xét trên bản chép lúc sự kiện xảy ra.
+- **Kết quả của lượt xin trước đã bị hủy vẫn có thể được nhận** nếu tiến trình kịp thoát trước lệnh hủy. Giờ mọi kết quả của lượt gọi mà runner đã hủy đều bị bỏ.
+
+Hai lỗi nhỏ cũng được sửa: lý do bộ não dừng lại hiện trong log, và `run-heist-learning.sh` dừng khi runner thoát với mã khác 0 hoặc 3. Sau vòng sửa, 4 E2E không gọi model và 2 ván Opus thời gian thực (thắng 2/2, id Plan p1–p3 đúng thứ tự) đều đạt. Bảy lỗi nhỏ còn lại được hoãn, có danh sách trong ledger của plan. Đáng chú ý là hai lỗi hiếm: một sự kiện quan trọng trùng frame với lúc Plan kết thúc thì Plan xin trước vẫn được dùng; và một ván thắng mà không có `attention` theo sau thì có thể kết thúc với mã 6.
 
 ## Giới hạn đã biết
 - Haiku chỉ được kiểm bằng một lượt gọi thật trong loạt học, cộng với test đơn vị của `ModelRouter`.
