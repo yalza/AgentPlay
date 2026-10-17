@@ -92,70 +92,122 @@ Note: `csc.rsp` applies to every assembly in the project. Check first that no fi
 
 ## 3. Save hook
 
-A run must start where the goal starts (usually a new player) without losing the user's own progress. The hook **moves** the user's save aside (a rename, nothing is copied or deleted), lets the run create a fresh save, then moves the run's save to `<save folder>.agentplay-last-run` and the user's save back. Everything stays next to the save, so the moves never cross drives. Only a previous run's save is ever deleted.
+A run must start where the goal starts (usually a new player) without losing the user's own progress. The hook **moves** the user's save aside (a rename: nothing is copied or deleted), lets the run create a fresh save, then moves the run's save to `<save folder>.agentplay-last-run` and the user's save back. Everything stays next to the save, so the moves never cross drives. Only the save of an earlier agent run is ever deleted.
+
+Rules the template keeps:
+- **Crash recovery on Editor load.** If Unity is killed mid-run, the user's save stays parked. `RecoverParkedSave` gives it back as soon as an Editor opens the project again (when no AutoPlay run is in progress: `AgentPlay.Editor.AutoPlay.RunActive`), before the user can play on the agent's save.
+- **No user save yet.** If the user had no save, a marker file makes sure the run's save is moved away afterwards instead of becoming the user's save.
+- **Idempotent.** `BeforePlay` gives back a stale park first; `AfterPlay` and the load-time recovery do nothing when there is nothing parked. AutoPlay also calls `AfterPlay` on a hook whose `BeforePlay` threw, so a half-finished park is undone.
+- **PlayerPrefs only when they exist.** In the Editor on Windows they live in the registry under `HKCU\Software\Unity\UnityEditor\<companyName>\<productName>`; `reg.exe copy` keeps value types. Leave the PlayerPrefs part out if the survey found no progress-relevant PlayerPrefs.
 
 ```csharp
 #if AGENTPLAY
+using System.Diagnostics;
 using System.IO;
 using AgentPlay.Editor;
+using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace AgentPlayAdapter.Editor
 {
-    /// <summary>Starts every AutoPlay run from a fresh save and gives the user's save back afterwards.</summary>
+    /// <summary>
+    /// Starts every AutoPlay run as a new player and gives the user's state back afterwards. The user's save folder
+    /// and PlayerPrefs are parked by rename/copy, never deleted; the run's save is kept as *.agentplay-last-run.
+    /// </summary>
     public sealed class FreshSaveHook : IAgentAutoPlayHook
     {
         // The folder the game saves into; adjust from the survey.
         static string Save => Path.Combine(Application.persistentDataPath, "<save folder>");
         static string Parked => Save + ".agentplay-user";
+        static string NoUserSave => Save + ".agentplay-none";
         static string LastRun => Save + ".agentplay-last-run";
+        static string Key => @"HKCU\Software\Unity\UnityEditor\" + Application.companyName + @"\" + Application.productName;
+        static string ParkedKey => Key + ".agentplay-user";
 
         public void BeforePlay()
         {
-            // A parked save left by a crashed run is the user's real save: put it back before anything else.
-            if (Directory.Exists(Parked)) GiveBack();
+            GiveBack();   // a park left by a crashed run is the user's real state: restore it before anything else
             if (Directory.Exists(Save)) Directory.Move(Save, Parked);
-            Debug.Log("[AgentPlay] user save parked; the run starts from a fresh save");
+            else File.WriteAllText(NoUserSave, "");
+            if (RegExists(Key))
+            {
+                Reg("copy \"" + Key + "\" \"" + ParkedKey + "\" /s /f");
+                Reg("delete \"" + Key + "\" /f");
+            }
+            Debug.Log("[AgentPlayAdapter] user save and PlayerPrefs parked; the run starts as a new player");
         }
 
         public void AfterPlay()
         {
-            if (Directory.Exists(Parked)) GiveBack();
-            Debug.Log("[AgentPlay] user save restored");
+            GiveBack();
+            Debug.Log("[AgentPlayAdapter] user save and PlayerPrefs restored");
         }
 
-        static void GiveBack()
+        /// <summary>Gives back what a run parked. Does nothing when nothing is parked.</summary>
+        public static void GiveBack()
         {
-            if (Directory.Exists(Save))
+            if (Directory.Exists(Parked) || File.Exists(NoUserSave))
             {
-                if (Directory.Exists(LastRun)) Directory.Delete(LastRun, true);   // the previous run's save, never the user's
-                Directory.Move(Save, LastRun);
+                if (Directory.Exists(Save))
+                {
+                    if (Directory.Exists(LastRun)) Directory.Delete(LastRun, true);   // an earlier run's save, never the user's
+                    Directory.Move(Save, LastRun);
+                }
+                if (Directory.Exists(Parked)) Directory.Move(Parked, Save);
+                if (File.Exists(NoUserSave)) File.Delete(NoUserSave);
             }
-            Directory.Move(Parked, Save);
+            if (RegExists(ParkedKey))
+            {
+                if (RegExists(Key)) Reg("delete \"" + Key + "\" /f");   // the run's PlayerPrefs
+                Reg("copy \"" + ParkedKey + "\" \"" + Key + "\" /s /f");
+                Reg("delete \"" + ParkedKey + "\" /f");
+            }
+        }
+
+        static bool RegExists(string key) => Run("query \"" + key + "\"") == 0;
+
+        static void Reg(string args)
+        {
+            int code = Run(args);
+            if (code != 0) throw new IOException("reg " + args + " failed with exit code " + code);
+        }
+
+        static int Run(string args)
+        {
+            var info = new ProcessStartInfo("reg.exe", args) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+            using (var p = Process.Start(info))
+            {
+                p.StandardOutput.ReadToEnd();
+                p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                return p.ExitCode;
+            }
+        }
+    }
+
+    /// <summary>Gives a crashed run's parked save back as soon as an Editor opens the project, outside AutoPlay runs.</summary>
+    [InitializeOnLoad]
+    static class RecoverParkedSave
+    {
+        static RecoverParkedSave()
+        {
+            EditorApplication.delayCall += () =>
+            {
+                if (AutoPlay.RunActive) return;
+                try
+                {
+                    FreshSaveHook.GiveBack();
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError("[AgentPlayAdapter] could not give a parked save back: " + e);
+                }
+            };
         }
     }
 }
 #endif
 ```
 
-### PlayerPrefs
-
-In the Editor on Windows, PlayerPrefs live in the registry under `HKCU\Software\Unity\UnityEditor\<companyName>\<productName>`. If the survey found progress-relevant PlayerPrefs (tutorial flags, first-launch markers), park them the same way with `reg.exe`, which also preserves value types:
-
-```csharp
-static string Key => @"HKCU\Software\Unity\UnityEditor\" + Application.companyName + @"\" + Application.productName;
-
-static void Reg(string args)
-{
-    using (var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("reg.exe", args) { CreateNoWindow = true, UseShellExecute = false }))
-    {
-        p.WaitForExit();
-        if (p.ExitCode != 0 && !args.StartsWith("delete")) throw new IOException("reg " + args + " failed with " + p.ExitCode);
-    }
-}
-
-// BeforePlay (after giving back a stale park):  Reg("copy \"" + Key + "\" \"" + Key + ".agentplay-user\" /s /f"); Reg("delete \"" + Key + "\" /f");
-// GiveBack:  Reg("delete \"" + Key + "\" /f"); Reg("copy \"" + Key + ".agentplay-user\" \"" + Key + "\" /s /f"); Reg("delete \"" + Key + ".agentplay-user\" /f");
-```
-
-Detect a stale park with `reg query "<Key>.agentplay-user"` (exit code 0 means it exists). List the exact keys you found in the step-2 table, and tell the user that their PlayerPrefs are parked during runs.
+Tell the user in the step-5 report where a parked save would be (`<save folder>.agentplay-user`) and where the last run's save is kept (`<save folder>.agentplay-last-run`).

@@ -54,7 +54,8 @@ Không dùng được cho: bản build đã phát hành (chỉ chạy trong Edit
 git clone https://github.com/yalza/AgentPlay.git E:\AgentPlay
 cd E:\AgentPlay
 dotnet build Runner/AgentPlay.Runner.csproj
-setx AGENTPLAY_HOME E:\AgentPlay
+setx AGENTPLAY_HOME E:\AgentPlay          # cho các cửa sổ mở sau
+$env:AGENTPLAY_HOME = 'E:\AgentPlay'    # cho cửa sổ hiện tại
 ```
 
 Kiểm nhanh: `dotnet test AgentPlay.sln` phải báo `Passed!`.
@@ -183,7 +184,7 @@ bash Tools/run-adapter-batch.sh D:/MyGame 3              # 3 ván với Opus
 bash Tools/run-adapter-batch.sh D:/MyGame 1 plan.json    # 1 ván theo plan kịch bản, không gọi model
 ```
 
-Script mở Unity, vào Play mode, cho agent chơi, rồi thoát với mã 0 (thắng), 3 (thua), 1 (hết giờ) hoặc 2 (hook lỗi). Mỗi ván in một dòng: mã của runner và Unity, số lượt gọi model, và giá trị của observe tiến độ nếu đặt `AGENTPLAY_PROGRESS_OBSERVE`. Log nằm ở `.e2e/adapter-batch/<tên project>/`.
+Script mở Unity, vào Play mode, cho agent chơi, rồi thoát với mã 0 (thắng), 3 (thua), 1 (hết giờ, hoặc Play mode kết thúc mà chưa có kết quả) hoặc 2 (AutoPlay không khởi động được hoặc hook lỗi; loạt dừng lại để bạn kiểm tra save). Các ván trong batch luôn mang nhãn `debug` và không dùng để học. Mỗi ván in một dòng: mã của runner và Unity, số lượt gọi model, và giá trị của observe tiến độ nếu đặt `AGENTPLAY_PROGRESS_OBSERVE`. Log nằm ở `.e2e/adapter-batch/<tên project>/`.
 
 Lưu ý: Unity không mở được một project đã mở sẵn trong Editor khác. Đóng Editor của game trước khi chạy batch.
 
@@ -194,7 +195,7 @@ dotnet Runner/bin/Debug/net9.0/AgentPlay.Runner.dll check --idle-exit 120 &
 "$UNITY_EXE" -projectPath D:/MyGame -executeMethod AgentPlay.Editor.AutoPlay.Run
 ```
 
-`check` in mỗi mục một dòng `PASS`/`FAIL`: có observe, có action, đúng một action an toàn, có khai báo `game.won`, có `brief.md`, kiểu tham số action hợp lệ, nhận đủ hai snapshot, từng observe có giá trị (không null ở cả hai snapshot), Unity không báo lỗi. Thoát 0 nếu tất cả đạt.
+`check` in mỗi mục một dòng `PASS`/`FAIL`: có observe, có action, đúng một action an toàn, có khai báo `game.won`, có `brief.md`, kiểu tham số action hợp lệ, nhận đủ hai snapshot, từng observe có giá trị ở ít nhất một trong hai snapshot, không có khai báo nào bị registry loại (ví dụ tham số kiểu không hỗ trợ), Unity không báo lỗi. Thoát 0 nếu tất cả đạt.
 
 ### 6.4 Hook trước và sau lượt chạy
 
@@ -208,7 +209,7 @@ public sealed class MyHook : AgentPlay.Editor.IAgentAutoPlayHook
 }
 ```
 
-`BeforePlay` chạy theo thứ tự tên, `AfterPlay` theo thứ tự ngược lại, sau khi đã thoát Play mode. Giữa hai lần gọi có domain reload, nên lưu trạng thái ra đĩa thay vì vào field.
+`BeforePlay` chạy theo thứ tự tên, `AfterPlay` theo thứ tự ngược lại, sau khi đã thoát Play mode. Hook nào đã được gọi `BeforePlay` thì đều được gọi `AfterPlay`, kể cả hook ném exception, nên `AfterPlay` phải an toàn khi `BeforePlay` mới làm được một nửa. `AfterPlay` lỗi thì AutoPlay thoát mã 2 dù ván thắng hay thua. Hook cần constructor public không tham số. Giữa hai lần gọi có domain reload, nên lưu trạng thái ra đĩa thay vì vào field. Mẫu hook cất save (có khôi phục khi Unity bị tắt ngang) nằm trong [`adapter-shapes.md`](../.claude/skills/agentplay-adapt/reference/adapter-shapes.md).
 
 ## 7. Cho agent học
 
@@ -369,7 +370,7 @@ Cấu hình mặc định ở `Runner/runner.json`: model chiến thuật, effor
 | Runner báo `no Unity connection` | Game chưa vào Play mode, hoặc cổng 47800–47809 bị chiếm | Bấm Play; tắt runner/Unity cũ còn sót; `--ports` |
 | `connected but no hello` | Một runner khác đang giữ kết nối | Tắt runner cũ |
 | `model call failed ... (429)` | Hết quota Claude (giới hạn theo tuần) | Chờ quota phục hồi; thử trước bằng `echo OK \| claude -p --model claude-haiku-5-5` |
-| Batch báo Unity thoát ngay | Project đang mở trong Editor khác | Đóng Editor của project |
+| Batch báo `unity=2` và dừng | Project đang mở trong Editor khác, scene trong `AGENTPLAY_AUTOPLAY_SCENE` không tồn tại, hoặc hook lỗi | Đọc `autoplay-<n>.log` trong thư mục log của batch; đóng Editor của project; sửa scene hoặc hook |
 | `check` báo `FAIL observe ...` | Observe trả null ở cả hai snapshot | Sửa nguồn của observe (object chưa tìm thấy, chưa khởi tạo) |
 | Agent đi vòng vòng, hết giờ | Action không bao giờ kết thúc, hoặc mô tả action không khớp việc nó làm | Thêm giới hạn thời gian/khoảng cách cho action; sửa mô tả; bổ sung brief |
 | Unity chậm, treo, log báo hết chỗ | Ổ C: đầy (Temp, cache Unity) | Giải phóng ổ C: trước khi chạy batch dài |

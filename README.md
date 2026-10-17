@@ -71,7 +71,8 @@ Newline-delimited JSON over TCP; every message has `type` and `seq`. Unity is th
 git clone https://github.com/yalza/AgentPlay.git E:\AgentPlay
 cd E:\AgentPlay
 dotnet build Runner/AgentPlay.Runner.csproj
-setx AGENTPLAY_HOME E:\AgentPlay
+setx AGENTPLAY_HOME E:\AgentPlay          # for new windows
+$env:AGENTPLAY_HOME = 'E:\AgentPlay'    # for this window
 ```
 
 ### Add the package to a game
@@ -158,7 +159,7 @@ bash Tools/run-adapter-batch.sh D:/MyGame 3              # 3 Opus runs
 bash Tools/run-adapter-batch.sh D:/MyGame 1 plan.json    # a script plan, no model calls
 ```
 
-Environment: `AGENTPLAY_AUTOPLAY_SCENE` (scene to open), `AGENTPLAY_AUTOPLAY_SECONDS` (deadline), `AGENTPLAY_SESSION_TAG` (`play` to learn from the run), `AGENTPLAY_PROGRESS_OBSERVE` (an observe printed after each run). Any game can add Editor hooks (`AgentPlay.Editor.IAgentAutoPlayHook`) that run before and after an unattended run.
+Environment: `AGENTPLAY_AUTOPLAY_SCENE` (scene to open), `AGENTPLAY_AUTOPLAY_SECONDS` (deadline), `AGENTPLAY_PROGRESS_OBSERVE` (an observe printed as first -> last value after each run). The batch tags its runs `debug` and does not learn from them; to learn from unattended runs, start the runner yourself and run `AgentPlay.Editor.AutoPlay.Run` with `AGENTPLAY_SESSION_TAG=play`. Any game can add Editor hooks (`AgentPlay.Editor.IAgentAutoPlayHook`) that run before and after an unattended run; a hook that fails makes AutoPlay exit 2 and stops the batch.
 
 Check an adapter without a model:
 

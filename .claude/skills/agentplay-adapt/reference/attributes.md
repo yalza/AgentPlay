@@ -108,8 +108,8 @@ If the game loads its gameplay scene after a loading scene, keep the adapter ali
 public interface IAgentAutoPlayHook
 {
     void BeforePlay();   // before Play mode; throw to abort the run (AutoPlay exits 2)
-    void AfterPlay();    // after Play mode ended, also after a deadline or a failed hook
+    void AfterPlay();    // after Play mode ended: also after a deadline, a failed hook, or this hook's own BeforePlay throwing
 }
 ```
 
-Editor-only, created with a parameterless constructor; keep state on disk (a domain reload separates the two calls). Template: `adapter-shapes.md`.
+Editor-only, created with a public parameterless constructor (AutoPlay logs a warning and skips a hook without one); keep state on disk (a domain reload separates the two calls). Make `AfterPlay` safe to call when `BeforePlay` stopped halfway. An exception in `AfterPlay` makes AutoPlay exit 2 whatever the round's result. Template: `adapter-shapes.md`.
