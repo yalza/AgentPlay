@@ -23,3 +23,5 @@
 **Scene order.** If the game expects a loading scene to run first (it initializes services, addressables or the save), set `AGENTPLAY_AUTOPLAY_SCENE` to that scene; the adapter must then survive scene changes (`DontDestroyOnLoad`, lazy lookups).
 
 **`game.won` for progress goals.** Games rarely have a "win" for "finish 3 missions". The adapter counts the goal itself (for example completed missions since the run started) and emits `game.won` once when it is reached; emit it only once.
+
+**Name clashes in Assembly-CSharp (seen in M4b).** A type declared in the global namespace wins over a type of the same name imported with `using`. A game with both `SomeNamespace.MissionType` and a global `MissionType` silently gave the adapter the wrong enum (`Purchase` instead of `Collect`). In the Assembly-CSharp shape, fully qualify game types whose names are common (`Game.Namespace.MissionType`), and check one observe value against the game data by hand in tier 2.
