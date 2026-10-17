@@ -3,9 +3,9 @@
 Ngày chạy: 2026-10-17 (Windows 11, Unity 6000.0.77f1, .NET SDK 9.0.315, Claude Code CLI đăng nhập bằng gói Claude, model `claude-opus-5-5`)
 
 ## Test
-- `dotnet test AgentPlay.sln`: 357/357 passed (14 test mới cho `check`)
-- `Tools/unity-tests.sh`: 157/157 passed (11 test mới cho AutoPlay: quy tắc thoát, thứ tự hook, lọc hook)
-- `Tools/test-link-agentplay.sh`: 30/30 passed (`-LocalOnly`, `-Unlink`, `-Purge`, cảnh báo của git, `csc.rsp` của người dùng, `packages-lock.json` có thay đổi riêng)
+- `dotnet test AgentPlay.sln`: 359/359 passed (16 test mới cho `check`)
+- `Tools/unity-tests.sh`: 160/160 passed (14 test mới cho AutoPlay: quy tắc thoát, thứ tự hook, lọc hook)
+- `Tools/test-link-agentplay.sh`: 36/36 passed (`-LocalOnly`, `-Unlink`, `-Purge`, cảnh báo của git, `csc.rsp` của người dùng, `packages-lock.json` có thay đổi riêng, file đã commit, project trong thư mục con của repo, file exclude có ký tự không phải ASCII)
 - `Tools/e2e-m4b-check.sh` (không gọi model): ALL CHECKS PASSED, `check` đạt cả 15 mục trên Heist
 - Hồi quy: xem mục "Regression cuối" bên dưới
 
@@ -50,12 +50,28 @@ Lần chạy thử tìm ra một lỗi thật và 13 chỗ hướng dẫn chưa 
 - **`-Unlink` dừng giữa chừng trên PetRPG:** cảnh báo CRLF của git trên stderr thành lỗi dừng script trong PowerShell 5.1, và Unity chỉ đổi kiểu xuống dòng của `packages-lock.json` nên `git diff --quiet` không thấy. Đã sửa, có test: gọi git qua hàm bọc; khôi phục theo `git status`, và chỉ khi file sạch lúc gắn package.
 - **`-Unlink` giữ `AgentPlay/` nhưng spec đòi `git status` sạch:** giờ giữ một dòng loại trừ cho `AgentPlay/` cho tới khi `-Purge`.
 
+## Review độc lập
+Một reviewer có ngữ cảnh mới (Opus, chỉ đọc code) kết luận "merge được sau khi sửa": 1 lỗi nghiêm trọng, 8 lỗi quan trọng, 9 lỗi nhỏ. Năm tình huống trong Review Focus của plan đều đạt khi đọc code.
+
+Đã sửa, mỗi lỗi có test fail trước khi sửa (trừ hai mục ghi rõ cách kiểm khác):
+- **Nghiêm trọng:** AutoPlay bỏ qua mọi hook trong assembly có tham chiếu NUnit. Một game có test kiểu cũ trong thư mục `Editor` sẽ mất hook save, và agent chơi đè lên save thật. Giờ chỉ bỏ qua assembly test của chính AgentPlay, và hook bị bỏ qua đều được ghi cảnh báo.
+- AutoPlay treo khi Play mode không bắt đầu được hoặc kết thúc mà chưa có kết quả. Giờ hạn chót áp dụng cả ngoài Play mode, và Play mode kết thúc sớm thì lượt chạy kết thúc với mã 1.
+- `AfterPlay` lỗi không đổi mã thoát. Giờ thoát 2, và batch dừng lại để người dùng kiểm tra save.
+- Hook ném lỗi trong `BeforePlay` không được gọi `AfterPlay`. Giờ được gọi.
+- `check` không thấy khai báo bị registry loại. Giờ `hello` mang `registry_errors`. `check` cũng không chấp nhận `brief.md` còn là khung mẫu.
+- `-Unlink`/`-Purge` có thể xóa file nhóm đã commit. Mẫu loại trừ sai khi project Unity nằm trong thư mục con của repo. File exclude bị đọc theo code page ANSI. Đã sửa cả ba.
+- Batch treo khi runner không bao giờ gặp game. Kiểm bằng tay với một scene không tồn tại: runner bị dừng sau 30 giây, batch thoát 2 sau 42 giây.
+- Mẫu hook save: tự trả save khi mở Editor sau một lần Unity bị tắt ngang; xử lý trường hợp người dùng chưa có save; chỉ chép PlayerPrefs khi có. Mẫu được kiểm bằng cách biên dịch trong `Assembly-CSharp-Editor` của Heist, chưa chạy lại trên PetRPG.
+- Tài liệu: lệnh `setx` cần thêm `$env:` cho cửa sổ hiện tại; ván trong batch mang nhãn `debug`; sửa mô tả mục kiểm observe; bậc 1 của skill so lỗi biên dịch với lần biên dịch trước khi gắn package; bậc 2 đòi dòng `AutoPlay hook ready`.
+
+Hoãn (lỗi nhỏ): `-Unlink` trên project không dùng git báo lỗi; `-Unlink` ở chế độ mặc định không xóa dòng nó đã thêm vào `.gitignore`.
+
 ## Regression cuối
-Chạy sau mọi bản sửa của Task 8, tất cả thoát 0:
-- `dotnet test AgentPlay.sln`: 357/357
-- `Tools/unity-tests.sh`: 157/157
+Chạy sau vòng sửa theo review, tất cả thoát 0:
+- `dotnet test AgentPlay.sln`: 359/359
+- `Tools/unity-tests.sh`: 160/160
 - `Tools/check-generic.sh`: OK
-- `Tools/test-link-agentplay.sh`: 30/30
+- `Tools/test-link-agentplay.sh`: 36/36
 - `Tools/e2e-m2a.sh`, `Tools/e2e-m3-reflex.sh`, `Tools/e2e-m2c.sh script`, `Tools/e2e-m4a-realtime.sh`, `Tools/e2e-m4b-check.sh`: ALL CHECKS PASSED
 - `python -I Tools/test_telemetry_trend.py`: passed
 
