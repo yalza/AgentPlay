@@ -242,7 +242,7 @@ python -I Tools/test_telemetry_trend.py
 | M3 Learning: reflector, playbook, reflexes and their review | done |
 | M4a Realtime: attention, model router, plan prefetch, trend | done |
 | M4b Reach: `agentplay-adapt` skill, generic AutoPlay, `runner check`, local-only linking | done |
-| Level 0: play from screenshots without an adapter | not started |
+| Level 0: play from screenshots without an adapter | not planned |
 
 ## License
 
