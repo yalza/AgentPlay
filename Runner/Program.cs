@@ -41,6 +41,7 @@ namespace AgentPlay.Runner
                 if (reflectConfig == null) return 2;
                 return await new Reflector(MakeClient(reflectConfig), reflectConfig, Log).RunAsync(options.ProjectDir, options.Traces, options.Force, CancellationToken.None);
             }
+            if (options.Command == "check") return await CheckCommand.RunAsync(options, Log);
             if (options.ReflectorSmoke)
             {
                 var smokeConfig = LoadConfig(options);

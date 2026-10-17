@@ -80,6 +80,7 @@ namespace AgentPlay.Editor
             hello.ProjectRoot = projectRoot;
             hello.Brief = ReadBrief(projectRoot);
             hello.SessionTag = tag;
+            hello.RegistryErrors.AddRange(_model.Errors);
             Book = ReflexBook.Load(projectRoot);
             Book.ImportInbox();
             var reflexes = Book.PrepareSession(hello, m => Debug.LogWarning("[AgentPlay] " + m));
