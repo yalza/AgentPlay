@@ -19,7 +19,8 @@ $ErrorActionPreference = 'Stop'
 
 # Unity's csc.rsp has no comment syntax, so AgentPlay's file is recognised by its exact content.
 $OurRsp = '-define:AGENTPLAY'
-$Block = @('# AgentPlay begin', '/Packages/com.agentplay.core', '/AgentPlay/', '/Assets/AgentPlayAdapter/', '/Assets/AgentPlayAdapter.meta', '/Assets/csc.rsp', '/Assets/csc.rsp.meta', '# AgentPlay end')
+# Paths relative to the Unity project; Get-Block prefixes them with the project's folder inside the repository.
+$Paths = @('Packages/com.agentplay.core', 'AgentPlay/', 'Assets/AgentPlayAdapter/', 'Assets/AgentPlayAdapter.meta', 'Assets/csc.rsp', 'Assets/csc.rsp.meta')
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
 # Runs git without letting its stderr warnings (CRLF notices, ...) become terminating errors under 'Stop' in PowerShell 5.1.
@@ -45,16 +46,38 @@ function Get-ExcludePath($project) {
     return (Join-Path $info 'exclude')
 }
 
+# The exclude block for this project: patterns anchored at the repository root, so a Unity project in a subfolder
+# of the repository is covered too.
+function Get-Block($project, $paths) {
+    $prefix = "$(Invoke-Git -C $project rev-parse --show-prefix)".Trim()
+    return @('# AgentPlay begin') + ($paths | ForEach-Object { '/' + $prefix + $_ }) + @('# AgentPlay end')
+}
+
+# Removes the AgentPlay block and keeps every other byte of the file (UTF-8, the file's own line endings).
 function Remove-ExcludeBlock($path) {
     if (-not (Test-Path $path)) { return }
+    $text = [System.IO.File]::ReadAllText($path, $Utf8)
+    $lines = $text -split "`n", -1
     $out = New-Object System.Collections.Generic.List[string]
     $inside = $false
-    foreach ($l in (Get-Content $path)) {
-        if ($l -eq '# AgentPlay begin') { $inside = $true; continue }
-        if ($l -eq '# AgentPlay end') { $inside = $false; continue }
+    foreach ($l in $lines) {
+        $bare = $l.TrimEnd("`r")
+        if ($bare -eq '# AgentPlay begin') { $inside = $true; continue }
+        if ($bare -eq '# AgentPlay end') { $inside = $false; continue }
         if (-not $inside) { $out.Add($l) }
     }
-    [System.IO.File]::WriteAllLines($path, $out, $Utf8)
+    [System.IO.File]::WriteAllText($path, ($out -join "`n"), $Utf8)
+}
+
+function Add-ExcludeBlock($path, $block) {
+    $text = if (Test-Path $path) { [System.IO.File]::ReadAllText($path, $Utf8) } else { '' }
+    if ($text.Length -gt 0 -and -not $text.EndsWith("`n")) { $text += "`n" }
+    [System.IO.File]::WriteAllText($path, $text + (($block -join "`n") + "`n"), $Utf8)
+}
+
+# True when git tracks the path (or anything under it): such files belong to the team and are never deleted.
+function Test-Tracked($project, $relative) {
+    return [bool](Invoke-Git -C $project ls-files -- $relative)
 }
 
 $package = (Resolve-Path (Join-Path $PSScriptRoot '..\Packages\com.agentplay.core')).Path
@@ -72,12 +95,15 @@ if ($Unlink) {
         cmd /c rmdir "$link" | Out-Null
         Write-Host "Removed junction $link"
     }
-    foreach ($p in @('Assets\AgentPlayAdapter', 'Assets\AgentPlayAdapter.meta')) {
+    foreach ($p in @('Assets/AgentPlayAdapter', 'Assets/AgentPlayAdapter.meta')) {
         $full = Join-Path $project $p
-        if (Test-Path $full) { Remove-Item $full -Recurse -Force; Write-Host "Removed $full" }
+        if (-not (Test-Path $full)) { continue }
+        if (Test-Tracked $project $p) { Write-Host "Kept ${full}: git tracks it (committed by your team)"; continue }
+        Remove-Item $full -Recurse -Force
+        Write-Host "Removed $full"
     }
     $rsp = Join-Path $project 'Assets\csc.rsp'
-    if ((Test-Path $rsp) -and (((Get-Content $rsp -Raw) -as [string]).Trim() -eq $OurRsp)) {
+    if ((Test-Path $rsp) -and -not (Test-Tracked $project 'Assets/csc.rsp') -and (((Get-Content $rsp -Raw) -as [string]).Trim() -eq $OurRsp)) {
         Remove-Item $rsp -Force
         if (Test-Path "$rsp.meta") { Remove-Item "$rsp.meta" -Force }
         Write-Host "Removed $rsp"
@@ -94,12 +120,15 @@ if ($Unlink) {
     }
     if (Test-Path $lockClean) { Remove-Item $lockClean -Force }
     $ap = Join-Path $project 'AgentPlay'
-    if ($Purge) {
-        if (Test-Path $ap) { Remove-Item $ap -Recurse -Force; Write-Host "Removed $ap" }
+    $apTracked = Test-Tracked $project 'AgentPlay'
+    if ($Purge -and (Test-Path $ap) -and -not $apTracked) {
+        Remove-Item $ap -Recurse -Force
+        Write-Host "Removed $ap"
     } elseif (Test-Path $ap) {
         # AgentPlay/ (traces, playbook) is kept, so it stays out of git status.
-        [System.IO.File]::AppendAllText($exclude, "# AgentPlay begin`n/AgentPlay/`n# AgentPlay end`n", $Utf8)
-        Write-Host "Kept $ap (still excluded from git); add -Purge to delete it"
+        Add-ExcludeBlock $exclude (Get-Block $project @('AgentPlay/'))
+        if ($apTracked) { Write-Host "Kept ${ap}: git tracks files in it (committed by your team); untracked output stays excluded" }
+        else { Write-Host "Kept $ap (still excluded from git); add -Purge to delete it" }
     }
     exit 0
 }
@@ -119,7 +148,7 @@ if (Test-Path $link) {
 if ($LocalOnly) {
     $exclude = Get-ExcludePath $project
     Remove-ExcludeBlock $exclude
-    [System.IO.File]::AppendAllText($exclude, (($Block -join "`n") + "`n"), $Utf8)
+    Add-ExcludeBlock $exclude (Get-Block $project $Paths)
     # Remember whether packages-lock.json was clean, so -Unlink restores it only then.
     New-Item -ItemType Directory -Force (Join-Path $project 'AgentPlay') | Out-Null
     $lockClean = Join-Path $project 'AgentPlay\.packages-lock-was-clean'

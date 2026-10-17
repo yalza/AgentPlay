@@ -89,11 +89,52 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$DI
 powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$DIRTY_W" -Unlink
 check 'grep -q "user.change" "$DIRTY/Packages/packages-lock.json"' "unlink keeps the user's own packages-lock.json changes"
 
+# Files the team committed are never deleted, even where AgentPlay would put its own.
+TRACKED="$TMP/TrackedGame"
+mkdir -p "$TRACKED/Packages" "$TRACKED/Assets/AgentPlayAdapter" "$TRACKED/AgentPlay"
+echo '{"dependencies":{}}' > "$TRACKED/Packages/manifest.json"
+echo "// committed adapter" > "$TRACKED/Assets/AgentPlayAdapter/Committed.cs"
+echo "# committed brief" > "$TRACKED/AgentPlay/brief.md"
+git -C "$TRACKED" init -q && git -C "$TRACKED" add -A && git -C "$TRACKED" -c user.email=t@t -c user.name=t commit -q -m init
+TRACKED_W="$(cygpath -w "$TRACKED")"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$TRACKED_W" -LocalOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$TRACKED_W" -Unlink -Purge
+check '[ -f "$TRACKED/Assets/AgentPlayAdapter/Committed.cs" ] && [ -f "$TRACKED/AgentPlay/brief.md" ]' "unlink and purge keep committed files"
+check '[ -z "$(git -C "$TRACKED" status --porcelain)" ]' "git status clean after unlink of a project with committed AgentPlay files"
+
+# A Unity project in a subfolder of the git repository.
+SUB="$TMP/MonoRepo"
+mkdir -p "$SUB/Client/Packages" "$SUB/Client/Assets" "$SUB/Server"
+echo '{"dependencies":{}}' > "$SUB/Client/Packages/manifest.json"
+echo "server" > "$SUB/Server/readme.txt"
+git -C "$SUB" init -q && git -C "$SUB" add -A && git -C "$SUB" -c user.email=t@t -c user.name=t commit -q -m init
+SUB_W="$(cygpath -w "$SUB/Client")"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$SUB_W" -LocalOnly
+mkdir -p "$SUB/Client/Assets/AgentPlayAdapter" && echo "// adapter" > "$SUB/Client/Assets/AgentPlayAdapter/A.cs"
+check '[ -z "$(git -C "$SUB" status --porcelain)" ]' "local-only in a repo subfolder leaves git status clean"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$SUB_W" -Unlink
+check '[ -z "$(git -C "$SUB" status --porcelain)" ]' "unlink in a repo subfolder leaves git status clean"
+
+# The user's own exclude lines survive byte for byte, non-ASCII included.
+ENC="$TMP/EncGame"
+mkdir -p "$ENC/Packages"
+echo '{"dependencies":{}}' > "$ENC/Packages/manifest.json"
+git -C "$ENC" init -q && git -C "$ENC" add -A && git -C "$ENC" -c user.email=t@t -c user.name=t commit -q -m init
+printf '/Thư-mục-riêng/\n' >> "$ENC/.git/info/exclude"
+cp "$ENC/.git/info/exclude" "$TMP/exclude.before"
+ENC_W="$(cygpath -w "$ENC")"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$ENC_W" -LocalOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$ENC_W" -Unlink -Purge
+check 'cmp -s "$TMP/exclude.before" "$ENC/.git/info/exclude"' "user's exclude file restored byte for byte"
+
 # A csc.rsp that is not ours is never touched.
 printf -- '-nowarn:0618\n' > "$REPO/Assets/csc.rsp"
 git -C "$REPO" add -A && git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m rsp
 powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -LocalOnly
 powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -Unlink
 check 'grep -q "nowarn" "$REPO/Assets/csc.rsp"' "foreign csc.rsp kept"
+# Remove any junction a failed step left behind with rmdir first: rm -rf could follow it into the real package.
+for j in $(find "$TMP" -maxdepth 4 -name com.agentplay.core 2>/dev/null); do cmd //c rmdir "$(cygpath -w "$j")" > /dev/null 2>&1; done
+check '[ -f "$ROOT/Packages/com.agentplay.core/package.json" ]' "real package untouched at the end"
 rm -rf "$TMP"
 exit $fail
