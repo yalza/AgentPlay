@@ -66,7 +66,7 @@ Chọn một trong ba cách:
 **a. Chỉ trên máy (khuyên dùng cho repo của nhóm)**
 
 ```powershell
-powershell -File E:\AgentPlay\Tools\link-agentplay.ps1 -ProjectPath D:\MyGame -LocalOnly
+powershell -ExecutionPolicy Bypass -File E:\AgentPlay\Tools\link-agentplay.ps1 -ProjectPath D:\MyGame -LocalOnly
 ```
 
 - Tạo junction `D:\MyGame\Packages\com.agentplay.core` trỏ tới package, nên không phải sửa `manifest.json`.
