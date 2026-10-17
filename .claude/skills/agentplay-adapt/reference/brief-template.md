@@ -11,7 +11,7 @@
 - Win: <the exact condition behind game.won>.
 - Lose: <the condition behind game.lost, or "no lose condition; the run ends at the deadline">.
 - How things work that the observes do not show: <timers, costs, what each action does in the world, how long things take>.
-- Tips: <a known safe order of actions, if the survey found one>.
+- Tips: <how the game's mechanics behave (timings, ranges, what interrupts what), not a step-by-step solution: the run should show whether the agent can find the way>.
 ```
 
 Keep it short (under 40 lines). Name observes and actions exactly as the adapter declares them.

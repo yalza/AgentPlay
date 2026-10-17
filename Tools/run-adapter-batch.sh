@@ -3,15 +3,17 @@
 # script plan when one is given (no model calls).
 # Usage: bash Tools/run-adapter-batch.sh <game project> <N> [script.json]
 # Env: AGENTPLAY_AUTOPLAY_SCENE, AGENTPLAY_AUTOPLAY_SECONDS (default 900), AGENTPLAY_PROGRESS_OBSERVE (an observe path
-# printed from the last trace snapshot of each run). Logs in .e2e/adapter-batch/<project folder name>/.
+# printed as first -> last value from each run's trace). Each call logs to its own folder:
+# .e2e/adapter-batch/<project folder name>/<yyyyMMdd-HHmmss>/ (printed at the start), so earlier tiers' logs stay.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UNITY_EXE="${UNITY_EXE:-/e/6000.0.77f1/Editor/Unity.exe}"
 GAME="$(cd "$1" && pwd)"
 RUNS="${2:-3}"
 SCRIPT="${3:-}"
-LOGS="$ROOT/.e2e/adapter-batch/$(basename "$GAME")"
-mkdir -p "$LOGS" && rm -f "$LOGS"/*
+LOGS="$ROOT/.e2e/adapter-batch/$(basename "$GAME")/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$LOGS"
+echo "logs: $LOGS"
 dotnet build "$ROOT/Runner/AgentPlay.Runner.csproj" -c Debug -v q || exit 1
 if [ -n "$SCRIPT" ]; then BRAIN=(--brain script "$(cygpath -w "$SCRIPT")"); else BRAIN=(--brain opus); fi
 wins=0
@@ -32,7 +34,7 @@ for i in $(seq 1 "$RUNS"); do
     if [ -n "$TRACE" ]; then
       PROGRESS="$(python -I - "$TRACE" "$AGENTPLAY_PROGRESS_OBSERVE" <<'PY'
 import json, sys
-last = None
+first = last = None
 for line in open(sys.argv[1], encoding="utf-8"):
     try:
         r = json.loads(line)
@@ -40,7 +42,9 @@ for line in open(sys.argv[1], encoding="utf-8"):
         continue
     if isinstance(r, dict) and isinstance(r.get("state"), dict) and sys.argv[2] in r["state"]:
         last = r["state"][sys.argv[2]]
-print("%s=%s" % (sys.argv[2], last))
+        if first is None:
+            first = last
+print("%s=%s->%s" % (sys.argv[2], first, last))
 PY
 )"
     fi

@@ -1,6 +1,6 @@
 # Pitfalls seen in real adapters
 
-**Stick deadzone (M2c, TileThieves).** The Input System applies a deadzone (default 0.125) to gamepad sticks, so a small virtual stick value does nothing and fine aiming stalls. Pass stick values through `AgentPlay.InputDriving.VirtualGamepad.PastDeadzone(output)` (`$AGENTPLAY_HOME/Packages/com.agentplay.core/InputSystem/VirtualGamepad.cs`), which returns the raw value that reads back as `output` after the deadzone.
+**Stick deadzone (seen in M2c).** The Input System applies a deadzone (default 0.125) to gamepad sticks, so a small virtual stick value does nothing and fine aiming stalls. Pass stick values through `AgentPlay.InputDriving.VirtualGamepad.PastDeadzone(output)` (`$AGENTPLAY_HOME/Packages/com.agentplay.core/InputSystem/VirtualGamepad.cs`), which returns the raw value that reads back as `output` after the deadzone.
 
 **No allocation per frame (M2c review).** Actions run every frame and observes are read on every snapshot. No `FindObjectsByType`, LINQ, `new List<>` or string building in them. Cache references on first use; use `Physics.OverlapSphereNonAlloc` and similar `NonAlloc` queries.
 

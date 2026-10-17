@@ -44,7 +44,7 @@ Add `"AgentPlay.InputSystem"` and `"Unity.InputSystem"` to `references` when the
 }
 ```
 
-Worked example: TileThieves, branch `feat/agentplay-adapter`, file `Assets/_Project/Scripts/AgentAdapter/TileThievesAgent.cs` (an adapter that reads state through public APIs, turns state changes into events, and drives the thief with `AgentPlay.InputDriving.VirtualGamepad`).
+A gamepad-driven adapter reads state through the game's public APIs, turns state changes into events in `Update`, and drives the player with `AgentPlay.InputDriving.VirtualGamepad` (`$AGENTPLAY_HOME/Packages/com.agentplay.core/InputSystem/VirtualGamepad.cs`): stage stick and button values in the action, and the gamepad flushes them once per frame in `LateUpdate`.
 
 ## 2. Assembly-CSharp shape
 

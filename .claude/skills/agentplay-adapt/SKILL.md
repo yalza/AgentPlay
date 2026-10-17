@@ -15,10 +15,10 @@ Read `reference/attributes.md` before step 2, `reference/adapter-shapes.md` befo
 
 ## Hard rules
 
-- **Change no file that git tracks in the game repo.** Everything you add is excluded through `.git/info/exclude` by `link-agentplay.ps1 -LocalOnly`. Never edit the game's `.gitignore` or any game source file. Check `git -C <game> status --porcelain` before you start and after every step that writes files: it must not change.
+- **Change no file that git tracks in the game repo.** Everything you add is excluded through `.git/info/exclude` by `link-agentplay.ps1 -LocalOnly`. Never edit the game's `.gitignore` or any game source file. Record `git -C <game> status --porcelain` before you start and compare after every step that writes files. The one expected difference: while the package is linked, Unity adds it to the tracked `Packages/packages-lock.json`; `-Unlink` restores that file (or run `git -C <game> checkout -- Packages/packages-lock.json`).
 - **Never lose the player's save.** If the game persists progress, the adapter ships an `IAgentAutoPlayHook` that moves the save aside before Play and moves it back after (template in `reference/adapter-shapes.md`). Never delete the player's own save; only the save an agent run created may be deleted.
 - **Actions go through the player's own input path** (joystick value, virtual gamepad button, the exact method a UI button calls). No teleports and no direct edits to currency or progress. Test setup inside a hook (starting from a fresh save) is the only exception.
-- **Write no file before the user approves the step-2 table.** If the user said up front that you may proceed without them, write the table to `<game>/AgentPlay/proposal.md`, say so, and continue.
+- **Write no file before the user approves the step-2 table.** If the user said up front that you may proceed without them, run step 3.1 (the link, which also excludes `AgentPlay/` from git) first, then write the table to `<game>/AgentPlay/proposal.md`, say so, and continue.
 - **Never loosen a check in step 4 to make it pass.** Fix the adapter or report the blocker.
 
 ## Step 1: Survey (read only)
@@ -30,6 +30,7 @@ Find and note with `file:line`:
 3. How progress is saved: path (`Application.persistentDataPath/...`), PlayerPrefs keys, when it writes.
 4. The assembly layout: does game code sit in `.asmdef` assemblies, or in `Assembly-CSharp` (no asmdef)? This picks the adapter shape.
 5. The scene the game starts in (`ProjectSettings/EditorBuildSettings.asset`) and anything that blocks play in the Editor (consent dialogs, ads, login, a tutorial that locks input).
+6. The game's own Editor tools that act when the project opens: `[InitializeOnLoad]` classes and `EditorApplication` callbacks that pull or commit with git, rebuild scenes or regenerate files. Every tier below opens the project, so they will run. If one changes git or files, tell the user and agree on a way around it (its own on/off setting, or working on a detached HEAD or a separate worktree) before step 3.
 
 Skip third-party SDK folders. Output a short survey note in the conversation.
 
@@ -46,11 +47,11 @@ Ask the user to approve or change the table. Do not continue without approval (s
 
 ## Step 3: Attach
 
-1. `powershell -NoProfile -File "$AGENTPLAY_HOME/Tools/link-agentplay.ps1" -ProjectPath <game> -LocalOnly`
+1. `powershell -NoProfile -ExecutionPolicy Bypass -File "$AGENTPLAY_HOME/Tools/link-agentplay.ps1" -ProjectPath <game> -LocalOnly`. In a git worktree the exclude block lands in the repository's shared `info/exclude`, so it applies to every worktree of that repo until `-Unlink`.
 2. If `Assets/csc.rsp` already exists and its first line is not `# AgentPlay: local define, created by agentplay-adapt`, STOP and ask the user (the Assembly-CSharp shape needs that file).
 3. Write the adapter in `Assets/AgentPlayAdapter/` using the shape from `reference/adapter-shapes.md`.
 4. Write `<game>/AgentPlay/brief.md` from `reference/brief-template.md`. The model reads it every session; state the goal and the win condition exactly.
-5. Write `<game>/AgentPlay/scripts/smoke.json`: a script plan that makes real progress toward the goal without a model. Plan format: `$AGENTPLAY_HOME/Demos/Heist/AgentPlay/scripts/win.json` (`id`, `intent`, `steps` of `{do, args, until}`, optional `rules`, `timeout_s`).
+5. Write `<game>/AgentPlay/scripts/smoke.json`: a script plan that makes real progress toward the goal without a model. The file is `{"plans": [ <plan>, ... ]}`, played in order; each plan has `id`, `intent`, `steps` (`{do, args, until}`), optional `rules` (`{when, do, args, then}`) and `timeout_s`. Example: `$AGENTPLAY_HOME/Demos/Heist/AgentPlay/scripts/win.json`.
 6. Write the save hook if step 1 found saved progress.
 7. `git -C <game> status --porcelain` must be unchanged.
 
@@ -58,11 +59,13 @@ Ask the user to approve or change the table. Do not continue without approval (s
 
 Stop at the first failing tier, fix the adapter, rerun from that tier. Batchmode cannot open a project that an Editor already has open: ask the user before closing their Editor (or, if they gave you the go-ahead, close it only when its scene is not dirty).
 
-Set `AGENTPLAY_AUTOPLAY_SCENE=<Assets/...unity>` for tiers 2-4 when the project does not open on the start scene.
+Set `AGENTPLAY_AUTOPLAY_SCENE=<Assets/...unity>` for tiers 2-4 when the project does not open on the start scene. Set `AGENTPLAY_AUTOPLAY_SECONDS` to the Editor's load time plus about three times the expected play time (default 900 in the batch script); a deadline exit (1) means the goal was not reached in time.
+
+If Unity never exits, read its log: `[AgentPlay] AutoPlay could not start` or an exception from `executeMethod` means AutoPlay failed before Play mode. Stop that Unity process, fix the cause, and rerun the tier. Do not leave a second Unity running on the same project.
 
 1. **Compiles:** `"$UNITY_EXE" -batchmode -nographics -quit -projectPath <game> -logFile <log>`; the log has no `error CS`.
 2. **Adapter check:** start `dotnet "$AGENTPLAY_HOME/Runner/bin/Debug/net9.0/AgentPlay.Runner.dll" check --idle-exit 300` in the background, then `AGENTPLAY_AUTOPLAY_SECONDS=90 "$UNITY_EXE" -projectPath <game> -executeMethod AgentPlay.Editor.AutoPlay.Run -logFile <log>`. `check` exits 0 and prints no `FAIL` line. A `FAIL observe ...` means the observe is null in both snapshots: fix its source, do not drop it unless the goal does not need it.
-3. **Script plan:** `bash "$AGENTPLAY_HOME/Tools/run-adapter-batch.sh" <game> 1 <game>/AgentPlay/scripts/smoke.json` with `AGENTPLAY_PROGRESS_OBSERVE` set to the goal's progress observe. The run log (`$AGENTPLAY_HOME/.e2e/adapter-batch/<project>/run-1.log`) has no `plan_failed` and the progress observe moved.
+3. **Script plan:** `bash "$AGENTPLAY_HOME/Tools/run-adapter-batch.sh" <game> 1 <game>/AgentPlay/scripts/smoke.json` with `AGENTPLAY_PROGRESS_OBSERVE` set to the goal's progress observe. The script prints its log folder (one per call, so earlier tiers' logs stay) and `<observe>=<first>-><last>`. Pass: the run log has no `plan_failed` and the last value differs from the first in the goal's direction.
 4. **Opus:** `bash "$AGENTPLAY_HOME/Tools/run-adapter-batch.sh" <game> 1`; `runner=0` (game.won). If it loses or times out, read the run log: is the agent missing an observe, does an action not do what its description says, is the brief unclear? Fix that, not the goal.
 
 Exit codes. AutoPlay: 0 won, 1 deadline, 2 a hook failed, 3 lost. `check`: 0 all pass, 1 a check failed, 6 no game connected. Runner: 0 won, 3 lost, 4 the brain stopped (budget or model failure).

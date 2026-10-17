@@ -81,7 +81,7 @@ Pick one:
 - **Local-only link (recommended for team repos):** nothing tracked by git changes.
 
   ```powershell
-  powershell -File Tools/link-agentplay.ps1 -ProjectPath D:\MyGame -LocalOnly
+  powershell -ExecutionPolicy Bypass -File Tools/link-agentplay.ps1 -ProjectPath D:\MyGame -LocalOnly
   ```
 
   The package is linked through a junction at `Packages/com.agentplay.core`; the junction, `AgentPlay/`, `Assets/AgentPlayAdapter/` and an AgentPlay-made `Assets/csc.rsp` are excluded through `.git/info/exclude`. Remove everything with `-Unlink` (add `-Purge` to also delete `AgentPlay/` with traces and playbook).

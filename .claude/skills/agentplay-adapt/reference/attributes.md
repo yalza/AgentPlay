@@ -9,7 +9,7 @@ All types are in namespace `AgentPlay` (assembly `AgentPlay.Runtime`), except th
 public sealed class HeistGame : MonoBehaviour { ... }
 ```
 
-`VersionMember = nameof(SomeStaticStringProperty)` reads the version at runtime instead (TileThieves uses `Application.version`). Reflexes learned for one version are re-checked when the version changes.
+`VersionMember = nameof(SomeStaticStringProperty)` reads the version at runtime instead (for example a property returning `Application.version`). Reflexes learned for one version are re-checked when the version changes.
 
 ## `[AgentObserve]`: a value the agent sees
 
@@ -39,7 +39,7 @@ public float Distance => ...;
 [AgentObserve("moving_north", "True while walking towards +z")] public bool MovingNorth => _forward.z > 0f;
 ```
 
-The element type contributes no top-level observes. Plans can test list fields with `any(guards.moving_north)`, `max(guards.z)`.
+The element type contributes no top-level observes. It may be a `MonoBehaviour` or a plain C# class whose members carry `[AgentObserve]`. Plans can test list fields with `any(guards.moving_north)`, `max(guards.z)`.
 
 ## `[AgentAction]`: something the agent can do
 
@@ -59,7 +59,8 @@ public AgentActionStatus GoTo(AgentActionContext ctx, string zone)
 public AgentActionStatus Pick(string item) { ... }
 ```
 
-- Called **every frame** while it runs; return `Running`, `Done` or `Failed`.
+- Called **every frame** while it runs, after the game's own `Update` (the executor runs at execution order 10000); return `Running`, `Done` or `Failed`.
+- Input staged on `VirtualGamepad` lasts one frame: the gamepad flushes in `LateUpdate` and then resets its stage, so set stick and button values again every frame the action runs.
 - Optional first parameter `AgentActionContext`: `IsFirstFrame` (set up on the first call) and `Elapsed` (game seconds since the action started).
 - Other parameters: `float`, `int`, `bool`, `string` only. Name the allowed string values in the description.
 - Exactly one action has `Safe = true` and no parameters (for example `[AgentAction("stop", "Stand still", Safe = true)]`). It runs while no plan is available.
