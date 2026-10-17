@@ -119,6 +119,25 @@ namespace AgentPlay.Runner.Tests
         }
 
         [Fact]
+        public void RegistryErrorsFail()
+        {
+            // The registry drops an invalid action (e.g. a Vector3 parameter) and reports why; hello alone looks fine.
+            var h = GoodHello();
+            h.RegistryErrors.Add("Action 'goto' on Player.GoTo: parameter 'target' has unsupported type Vector3");
+            var item = Item(AdapterCheck.Run(h, TwoGoodSnaps(), new string[0]), "adapter registered without errors");
+            Assert.False(item.Passed);
+            Assert.Contains("unsupported type", item.Detail);
+        }
+
+        [Fact]
+        public void UnfilledBriefTemplateFails()
+        {
+            var h = GoodHello();
+            h.Brief = "# Brief\n\nGoal: ...\nHow to win: ...\nHow to lose: ...\nTips: ...\n";
+            Assert.False(Item(AdapterCheck.Run(h, TwoGoodSnaps(), new string[0]), "brief is not empty").Passed);
+        }
+
+        [Fact]
         public void FewerThanTwoSnapshotsFails()
         {
             var items = AdapterCheck.Run(GoodHello(), new List<JObject> { Snap(new { x = 0 }, "m1") }, new string[0]);

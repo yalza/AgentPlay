@@ -30,8 +30,11 @@ namespace AgentPlay.Runner
             var safe = hello.Actions.Where(a => a.Safe).Select(a => a.Name).ToList();
             items.Add(Item("exactly one safe action", safe.Count == 1, safe.Count == 0 ? "none" : string.Join(", ", safe)));
             items.Add(Item("declares game.won", hello.Events.Any(e => e.Name == ReservedEvents.GameWon), ""));
-            bool hasBrief = !string.IsNullOrWhiteSpace(hello.Brief);
-            items.Add(Item("brief is not empty", hasBrief, hasBrief ? "" : "write AgentPlay/brief.md"));
+            // The link script's template has "Goal: ..." placeholders; a brief still holding one was never written.
+            bool hasBrief = !string.IsNullOrWhiteSpace(hello.Brief) && !hello.Brief.Contains(": ...");
+            items.Add(Item("brief is not empty", hasBrief, hasBrief ? "" : "write AgentPlay/brief.md (empty or still the template)"));
+            var registryErrors = hello.RegistryErrors ?? new List<string>();
+            items.Add(Item("adapter registered without errors", registryErrors.Count == 0, string.Join(" | ", registryErrors)));
             var badParams = hello.Actions
                 .SelectMany(a => a.Params.Where(p => !ParamTypes.Contains(p.ValueType)).Select(p => a.Name + "(" + p.Name + ": " + p.ValueType + ")"))
                 .ToList();

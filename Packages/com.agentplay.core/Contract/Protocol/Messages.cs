@@ -52,6 +52,8 @@ namespace AgentPlay.Contract
         [JsonProperty("session_tag")] public string SessionTag = "debug";
         /// <summary>Reflexes the game runs by itself in this session.</summary>
         [JsonProperty("reflexes")] public List<ReflexInfo> Reflexes = new List<ReflexInfo>();
+        /// <summary>Attribute declarations the registry rejected (and left out of this hello), one message each.</summary>
+        [JsonProperty("registry_errors")] public List<string> RegistryErrors = new List<string>();
     }
 
     public sealed class EventMessage
