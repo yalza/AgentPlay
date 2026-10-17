@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Unity `6000.0.77f1` at `/e/6000.0.77f1/Editor/Unity.exe` (`UNITY_EXE` overrides). .NET SDK 9.
-- Adapter folder is always `Assets/AgentPlayAdapter/` (both shapes). Assembly-CSharp shape guards every file with `#if AGENTPLAY`; the symbol comes from `Assets/csc.rsp` whose first line is exactly `# AgentPlay: local define, created by agentplay-adapt`.
+- Adapter folder is always `Assets/AgentPlayAdapter/` (both shapes). Assembly-CSharp shape guards every file with `#if AGENTPLAY`; the symbol comes from `Assets/csc.rsp` whose whole content is exactly `-define:AGENTPLAY` (ruling in Task 8: csc.rsp has no comment syntax).
 - Nothing the skill adds may change `git status` of the game repo. Use `.git/info/exclude`, never the game's `.gitignore`, in `-LocalOnly` mode. Exclude block markers: `# AgentPlay begin` / `# AgentPlay end`.
 - AutoPlay exit codes: 0 won, 1 deadline, 2 hook failed, 3 lost. `check` exit codes: 0 all pass, 1 a check failed, 6 no connection/hello within `--idle-exit` (default 30 s for `check`).
 - Action rule for adapters: drive the player's own input path (joystick value, virtual gamepad, the method a UI button calls); no teleports, no direct currency/progress edits, except test setup inside a hook.

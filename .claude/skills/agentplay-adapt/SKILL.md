@@ -48,7 +48,7 @@ Ask the user to approve or change the table. Do not continue without approval (s
 ## Step 3: Attach
 
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File "$AGENTPLAY_HOME/Tools/link-agentplay.ps1" -ProjectPath <game> -LocalOnly`. In a git worktree the exclude block lands in the repository's shared `info/exclude`, so it applies to every worktree of that repo until `-Unlink`.
-2. If `Assets/csc.rsp` already exists and its first line is not `# AgentPlay: local define, created by agentplay-adapt`, STOP and ask the user (the Assembly-CSharp shape needs that file).
+2. If `Assets/csc.rsp` already exists and its whole content is not the single line `-define:AGENTPLAY`, STOP and ask the user (the Assembly-CSharp shape needs that file, and `-Unlink` only removes a `csc.rsp` with exactly that content).
 3. Write the adapter in `Assets/AgentPlayAdapter/` using the shape from `reference/adapter-shapes.md`.
 4. Write `<game>/AgentPlay/brief.md` from `reference/brief-template.md`. The model reads it every session; state the goal and the win condition exactly.
 5. Write `<game>/AgentPlay/scripts/smoke.json`: a script plan that makes real progress toward the goal without a model. The file is `{"plans": [ <plan>, ... ]}`, played in order; each plan has `id`, `intent`, `steps` (`{do, args, until}`), optional `rules` (`{when, do, args, then}`) and `timeout_s`. Example: `$AGENTPLAY_HOME/Demos/Heist/AgentPlay/scripts/win.json`.

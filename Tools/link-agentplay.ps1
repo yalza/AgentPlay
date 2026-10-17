@@ -17,7 +17,8 @@
 param([Parameter(Mandatory = $true)][string]$ProjectPath, [switch]$LocalOnly, [switch]$Unlink, [switch]$Purge)
 $ErrorActionPreference = 'Stop'
 
-$Marker = '# AgentPlay: local define, created by agentplay-adapt'
+# Unity's csc.rsp has no comment syntax, so AgentPlay's file is recognised by its exact content.
+$OurRsp = '-define:AGENTPLAY'
 $Block = @('# AgentPlay begin', '/Packages/com.agentplay.core', '/AgentPlay/', '/Assets/AgentPlayAdapter/', '/Assets/AgentPlayAdapter.meta', '/Assets/csc.rsp', '/Assets/csc.rsp.meta', '# AgentPlay end')
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
@@ -63,7 +64,7 @@ if ($Unlink) {
         if (Test-Path $full) { Remove-Item $full -Recurse -Force; Write-Host "Removed $full" }
     }
     $rsp = Join-Path $project 'Assets\csc.rsp'
-    if ((Test-Path $rsp) -and ((Get-Content $rsp -TotalCount 1) -eq $Marker)) {
+    if ((Test-Path $rsp) -and (((Get-Content $rsp -Raw) -as [string]).Trim() -eq $OurRsp)) {
         Remove-Item $rsp -Force
         if (Test-Path "$rsp.meta") { Remove-Item "$rsp.meta" -Force }
         Write-Host "Removed $rsp"

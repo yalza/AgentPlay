@@ -41,7 +41,7 @@ REPO_W="$(cygpath -w "$REPO")"
 powershell -NoProfile -ExecutionPolicy Bypass -File "$LINK_PS" -ProjectPath "$REPO_W" -LocalOnly
 check '[ $? -eq 0 ]' "local-only link succeeds"
 mkdir -p "$REPO/Assets/AgentPlayAdapter" && echo "// adapter" > "$REPO/Assets/AgentPlayAdapter/A.cs" && touch "$REPO/Assets/AgentPlayAdapter.meta"
-printf '# AgentPlay: local define, created by agentplay-adapt\n-define:AGENTPLAY\n' > "$REPO/Assets/csc.rsp"
+printf -- '-define:AGENTPLAY\n' > "$REPO/Assets/csc.rsp"
 check '[ -z "$(git -C "$REPO" status --porcelain)" ]' "local-only leaves git status clean"
 check 'grep -q "^Library/$" "$REPO/.gitignore" && [ "$(wc -l < "$REPO/.gitignore")" -eq 1 ]' "local-only does not touch .gitignore"
 check '[ "$(grep -c "^# AgentPlay begin$" "$REPO/.git/info/exclude")" -eq 1 ]' "exclude block written once"

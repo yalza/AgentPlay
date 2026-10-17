@@ -48,10 +48,9 @@ A gamepad-driven adapter reads state through the game's public APIs, turns state
 
 ## 2. Assembly-CSharp shape
 
-`Assets/csc.rsp` (the first line is how `link-agentplay.ps1 -Unlink` knows the file is ours):
+`Assets/csc.rsp`, exactly this one line (Unity's `csc.rsp` has no comment syntax: any other text is read as a source file name and breaks the build; `link-agentplay.ps1 -Unlink` recognises the file by this exact content):
 
 ```
-# AgentPlay: local define, created by agentplay-adapt
 -define:AGENTPLAY
 ```
 
