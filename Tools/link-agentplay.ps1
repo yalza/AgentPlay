@@ -22,9 +22,22 @@ $OurRsp = '-define:AGENTPLAY'
 $Block = @('# AgentPlay begin', '/Packages/com.agentplay.core', '/AgentPlay/', '/Assets/AgentPlayAdapter/', '/Assets/AgentPlayAdapter.meta', '/Assets/csc.rsp', '/Assets/csc.rsp.meta', '# AgentPlay end')
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
+# Runs git without letting its stderr warnings (CRLF notices, ...) become terminating errors under 'Stop' in PowerShell 5.1.
+function Invoke-Git {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & git @args 2>$null
+        $script:GitExit = $LASTEXITCODE
+        return $out
+    } finally {
+        $ErrorActionPreference = $saved
+    }
+}
+
 function Get-ExcludePath($project) {
     # The common dir, so a linked worktree uses the exclude file git really reads.
-    $gitDir = (& git -C $project rev-parse --git-common-dir 2>$null)
+    $gitDir = (Invoke-Git -C $project rev-parse --git-common-dir)
     if (-not $gitDir) { throw "$project is not a git repository; -LocalOnly and -Unlink need git" }
     if (-not [System.IO.Path]::IsPathRooted($gitDir)) { $gitDir = Join-Path $project $gitDir }
     $info = Join-Path $gitDir 'info'
@@ -70,8 +83,16 @@ if ($Unlink) {
         Write-Host "Removed $rsp"
     }
     Remove-ExcludeBlock $exclude
-    & git -C $project diff --quiet -- Packages/packages-lock.json 2>$null
-    if ($LASTEXITCODE -eq 1) { & git -C $project checkout -- Packages/packages-lock.json; Write-Host 'Restored Packages/packages-lock.json' }
+    # Restore packages-lock.json only if it was clean when we linked (Unity rewrites it, sometimes only its line endings).
+    $lockClean = Join-Path $project 'AgentPlay\.packages-lock-was-clean'
+    $lockChanged = [bool](Invoke-Git -C $project status --porcelain -- Packages/packages-lock.json)
+    if ((Test-Path $lockClean) -and $lockChanged) {
+        Invoke-Git -C $project checkout -- Packages/packages-lock.json | Out-Null
+        Write-Host 'Restored Packages/packages-lock.json'
+    } elseif ($lockChanged) {
+        Write-Host 'Packages/packages-lock.json had changes of yours before linking; left as is (remove the com.agentplay.core entry by hand if present)'
+    }
+    if (Test-Path $lockClean) { Remove-Item $lockClean -Force }
     $ap = Join-Path $project 'AgentPlay'
     if ($Purge) {
         if (Test-Path $ap) { Remove-Item $ap -Recurse -Force; Write-Host "Removed $ap" }
@@ -99,6 +120,13 @@ if ($LocalOnly) {
     $exclude = Get-ExcludePath $project
     Remove-ExcludeBlock $exclude
     [System.IO.File]::AppendAllText($exclude, (($Block -join "`n") + "`n"), $Utf8)
+    # Remember whether packages-lock.json was clean, so -Unlink restores it only then.
+    New-Item -ItemType Directory -Force (Join-Path $project 'AgentPlay') | Out-Null
+    $lockClean = Join-Path $project 'AgentPlay\.packages-lock-was-clean'
+    # A second -LocalOnly finds the file already changed by Unity and keeps the earlier marker.
+    if (-not (Invoke-Git -C $project status --porcelain -- Packages/packages-lock.json) -and -not (Test-Path $lockClean)) {
+        [System.IO.File]::WriteAllText($lockClean, "", $Utf8)
+    }
     Write-Host "Wrote the AgentPlay block to $exclude (nothing added to .gitignore)"
     Write-Host 'Unity may edit Packages/packages-lock.json; -Unlink restores it, or run: git checkout -- Packages/packages-lock.json'
 } else {
